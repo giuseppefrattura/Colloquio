@@ -193,14 +193,38 @@ public class SecurityConfig {
 
 #### 6. Spring Integration & Enterprise Integration Patterns (EIP)
 
-- **Scopo**: orchestrare flussi eterogenei tra protocolli e sistemi legacy (JMS, HTTP, FTP, file batch ISO, Kafka) in modo dichiarativo.
-- **Componenti chiave**:
-  - **Message**: payload e metadati/headers (es. `correlationId`, `idempotencyKey`).
-  - **Channel**: canale di comunicazione sincrono (DirectChannel) o asincrono (QueueChannel).
-  - **Transformer**: converte i messaggi da un formato a un altro (es. da messaggio ISO 8583 a JSON interno).
-  - **Router**: instrada i pagamenti verso circuiti differenti in base al BIN della carta.
-  - **Filter**: scarta transazioni duplicate o non conformi.
-  - **Adapter**: connettori pronti verso sistemi esterni (JMS Inbound Adapter, HTTP Outbound Gateway).
+- **Cosa sono gli EIP**: Gli *Enterprise Integration Patterns* (formalizzati da *Gregor Hohpe & Bobby Woolf*) sono un catalogo di pattern architetturali standard per risolvere il problema dell'integrazione tra sistemi enterprise eterogenei, distribuiti e legacy, basandosi sul paradigma della **messaggistica asincrona e disaccoppiata**.
+- **I 4 Pilastri Fondamentali di EIP**:
+  1. **Message**: l'unità di informazione composta da **Payload** (dati di business) e **Headers** (metadati come ID, correlation ID, timestamp, security token).
+  2. **Message Channel**: la condotta logica che collega i componenti, disaccoppiando mittente e destinatario sia a livello spaziale che temporale (es. *Point-to-Point* o *Publish-Subscribe*).
+  3. **Pipes and Filters**: l'architettura a pipeline in cui piccoli componenti indipendenti (*Filters*) elaborano o trasformano il messaggio e lo rilasciano sul canale (*Pipe*) successivo.
+  4. **Message Endpoint**: l'adattatore che connette il codice dell'applicazione al sistema di messaggistica (*Channel Adapter* e *Messaging Gateway*).
+
+##### Catalogo dei principali Pattern EIP (con esempi nel dominio Pagamenti)
+
+* **Routing Patterns (Instradamento)**:
+  * **Content-Based Router**: instrada il messaggio verso canali differenti esaminandone il payload o gli header (es. instrada verso circuito *CARD* vs bonifico *SEPA* in base al tipo pagamento).
+  * **Message Filter**: valuta un predicato booleano ed elimina i messaggi non validi (es. scarta transazioni con importo negativo o nulle).
+  * **Recipient List**: calcola dinamicamente a runtime una lista di destinatari a cui inviare una copia del messaggio.
+  * **Wire Tap**: duplica il flusso di messaggi inviando una copia a un canale secondario (es. audit trail, monitoraggio frodi o metriche) senza bloccare o alterare il flusso principale.
+  * **Scatter-Gather**: invia in broadcast una richiesta a più provider esterni e aggrega le risposte per selezionare la migliore (es. richiesta miglior tasso di cambio a più banche).
+
+* **Transformation Patterns (Trasformazione & Arricchimento)**:
+  * **Message Translator / Transformer**: converte i dati da un formato a un altro (es. da tracciato legacy ISO 8583 / CBI a JSON REST interno).
+  * **Content Enricher**: interroga una sorgente dati esterna (DB, cache Redis, servizio anagrafica) per completare il messaggio con dati mancanti (es. aggiunge i tassi FX correnti).
+  * **Content Filter**: rimuove campi superflui o sensibili prima dell'inoltro (es. mascheramento del PAN della carta di credito per conformità PCI-DSS).
+  * **Claim Check**: quando il payload è pesante (es. file report di quadratura), salva il payload in uno storage (es. S3/Blob) e passa nel messaggio solo l'identificativo/token di riferimento (*claim ticket*).
+
+* **Composition & Re-sequencing (Composizione e Flusso)**:
+  * **Splitter**: suddivide un messaggio composito in messaggi atomici (es. estrae 10.000 singole disposizioni da un unico file batch SEPA XML).
+  * **Aggregator**: raggruppa più messaggi correlati (`correlationId`) e li combina in un unico messaggio aggregato al raggiungimento di una condizione (es. timeout o ricezione di tutte le transazioni di un lotto).
+  * **Resequencer**: riordina i messaggi arrivati disallineati in base a un sequence number o timestamp prima di inoltrarli al consumatore.
+
+* **Resilience & Reliability (Resilienza)**:
+  * **Dead Letter Channel (DLC / DLQ)**: canale dedicato dove vengono dirottati i messaggi che non è possibile elaborare dopo $N$ tentativi di retry.
+  * **Idempotent Receiver**: verifica la chiave di unicità (`idempotencyKey`) per evitare l'elaborazione duplicata della stessa transazione.
+
+##### Esempio pratico in Spring Integration (Java DSL)
 
 ```java
 @Bean
@@ -216,9 +240,26 @@ public IntegrationFlow paymentProcessingFlow() {
 }
 ```
 
+##### Confronto: Spring Integration vs Apache Camel
+
+Entrambi i framework nascono per implementare gli **Enterprise Integration Patterns (EIP)** (*Hohpe & Woolf*) e condividono il modello a messaggi (*Payload + Headers*), ma differiscono per filosofia ed ecosistema:
+
+| Aspetto | Spring Integration | Apache Camel |
+| :--- | :--- | :--- |
+| **Ecosistema & Dipendenze** | Strettamente integrato nell'ecosistema **Spring** (Spring Boot, Spring Cloud, Spring Messaging). | **Agnostico**: gira standalone, con Spring Boot, Quarkus, Micronaut, Karaf/OSGi, ecc. |
+| **Paradigma di Flusso** | **Pipe-and-Filter / Channel-centric** (connessione tra `MessageChannel` ed endpoint). | **Route-centric** (definizione fluida basata su URI `from("...").to("...")`). |
+| **Connettori / Componenti** | Ottima copertura per standard enterprise (JMS, AMQP, Kafka, File, HTTP, JDBC, MQTT). | **Catalogo enorme (300+)** con connettori pronti per servizi SaaS e Cloud specifici. |
+| **Evoluzione Cloud** | Motore sottostante di **Spring Cloud Stream**. | Evoluto in **Camel K** (ottimizzato per Serverless e Kubernetes). |
+
+* **Quando scegliere Spring Integration**: se lo stack è 100% Spring Boot e si desidera un'integrazione nativa con il ciclo di vita dei bean Spring e con Spring Cloud Stream.
+* **Quando scegliere Apache Camel**: se servono connettori out-of-the-box verso centinaia di servizi eterogenei/SaaS terzi o se l'architettura include framework diversi (es. Quarkus) o ambienti Kubernetes-native (Camel K).
+
 ---
 
 ### Domande tipiche a colloquio (e risposte da Senior)
+
+- *D: Qual è la differenza principale tra Spring Integration e Apache Camel?*
+  - **R**: Entrambi implementano i pattern EIP (Enterprise Integration Patterns) e il modello a messaggi (payload + headers). Spring Integration è strettamente integrato nell'ecosistema Spring (rappresenta anche il motore sotto Spring Cloud Stream) e usa un approccio *channel-centric*. Apache Camel è agnostico rispetto al framework (utilizzabile con Quarkus, standalone, ecc.), adotta un approccio *route-centric* basato su URI e possiede un ecosistema di connettori/componenti out-of-the-box molto più vasto (oltre 300 connettori verso sistemi terzi e SaaS).
 
 - *D: Perché preferisci la Constructor Injection rispetto all'annotazione `@Autowired` sui campi?*
   - **R**: La Constructor Injection garantisce l'immutabilità dei campi (`final`), facilita i test unitari permettendo di passare mock senza avviare il container Spring o usare reflection, e garantisce il principio di fail-fast impedendo che l'applicazione si avvii con dipendenze mancanti.
