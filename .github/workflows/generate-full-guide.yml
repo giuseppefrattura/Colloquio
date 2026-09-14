@@ -1,0 +1,39 @@
+name: Genera Guida Completa Unificata
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-upload-guide:
+    name: Unione Capitoli e Creazione Artefatto
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del Repository
+        uses: actions/checkout@v4
+
+      - name: Configurazione Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Genera Documento Unificato
+        run: |
+          python3 scripts/merge_chapters.py
+
+      - name: Carica Artefatto Guida Completa (TXT e Markdown)
+        uses: actions/upload-artifact@v4
+        with:
+          name: guida-colloquio-completa
+          path: |
+            guida-colloquio-completa.txt
+            guida-colloquio-completa.md
+          retention-days: 90
+          if-no-files-found: error

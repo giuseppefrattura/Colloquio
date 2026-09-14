@@ -1,4 +1,4 @@
-## 28. Coding con IA & Coding Agent
+# 28. Coding con IA e Coding Agent
 
 ### Cos'è e perché conta
 Nei colloqui tecnici moderni (soprattutto per ruoli Senior) non ci si aspetta più che uno sviluppatore ignori gli strumenti di Intelligenza Artificiale, ma che dimostri una **forte maturità nel loro utilizzo**: saper sfruttare l'IA e gli **Agenti Autonomi di sviluppo (Coding Agents)** come acceleratori di produttività, mantenendo il controllo rigoroso su architettura del software, sicurezza, privacy dei dati finanziari (PCI-DSS/GDPR) e qualità del codice.
