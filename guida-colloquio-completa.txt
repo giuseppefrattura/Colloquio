@@ -1,7 +1,7 @@
 ================================================================================
 GUIDA DI STUDIO COMPLETA — COLLOQUIO SENIOR JAVA BACKEND DEVELOPER
-Generato automaticamente il: 2026-09-14 13:05:08 UTC
-Totale capitoli inclusi: 32
+Generato automaticamente il: 2026-09-14 14:10:50 UTC
+Totale capitoli inclusi: 39
 ================================================================================
 
 INDICE DEI CAPITOLI:
@@ -37,6 +37,13 @@ INDICE DEI CAPITOLI:
   - 30. Concetti Trasversali Importanti
   - 31. Dominio Pagamenti
   - 32. Dominio Assicurativo, Previdenziale e Sistemi Finanziari
+  - 33. Distributed Systems Fundamentals
+  - 34. System Design
+  - 35. Performance Engineering
+  - 36. Advanced Microservices e Event Driven
+  - 37. DDD e Software Architecture
+  - 38. Advanced Security e API Governance
+  - 39. SRE Reliability e Chaos Engineering
 
 ================================================================================
 
@@ -4578,4 +4585,429 @@ La riconciliazione è il processo contabile che garantisce che due set di dati i
 
 - *D: Come implementeresti il calcolo delle commissioni di performance con la regola dell'High-Water Mark (HWM)?*
   - **R**: L'High-Water Mark memorizza il valore NAV di picco storico al quale è stata pagata l'ultima commissione di performance. Ad ogni data di calcolo (es. fine anno), la commissione viene calcolata solo sulla quota di sovraperformance: $\text{Fee} = (\text{NAV}_{\text{attuale}} - \text{HWM}) \times \text{PerformanceRate} \times \text{Quote}$, e solo se $\text{NAV}_{\text{attuale}} > \text{HWM}$. Se l'anno si chiude con profitto, il valore dell'HWM viene aggiornato al nuovo NAV; se il fondo è in perdita, l'HWM resta invariato e il gestore non incassa nulla finché non recupera interamente la perdita precedente.
+
+
+
+################################################################################
+### CAPITOLO: 33. Distributed Systems Fundamentals
+################################################################################
+
+# 33. Distributed Systems Fundamentals
+
+## Obiettivo
+Capire i problemi fondamentali dei sistemi distribuiti e saper ragionare sui trade-off architetturali.
+
+## CAP Theorem
+- **Consistency**: ogni lettura osserva un valore coerente secondo il modello scelto
+- **Availability**: ogni richiesta riceve una risposta, anche in presenza di failure
+- **Partition Tolerance**: il sistema continua a operare nonostante una partizione di rete
+
+In un sistema distribuito la partition tolerance è un requisito pratico; il trade-off riguarda principalmente consistency vs availability durante una partizione.
+
+## Consistency Models
+- Strong consistency
+- Eventual consistency
+- Causal consistency
+- Read-your-writes
+- Monotonic reads
+
+## Problemi tipici
+- Network partition
+- Partial failure
+- Message loss
+- Duplicate messages
+- Message reordering
+- Timeout
+- Retry storm
+- Clock skew
+- Split brain
+
+## Distributed Coordination
+- Leader election
+- Quorum
+- Consensus
+- Distributed locking
+- Fencing token
+
+## Domande da colloquio
+1. Cos'è il CAP theorem?
+2. Perché la Partition Tolerance è praticamente inevitabile?
+3. Strong consistency vs eventual consistency?
+4. Cosa succede durante una network partition?
+5. Come gestisci messaggi duplicati o fuori ordine?
+6. Come implementeresti un distributed lock e quali problemi introduce?
+7. Perché i timeout sono fondamentali nei sistemi distribuiti?
+
+## Concetto chiave
+Un sistema distribuito deve essere progettato assumendo che **la rete possa fallire** e che i failure possano essere parziali: un servizio può essere vivo mentre una sua dipendenza è irraggiungibile o lenta.
+
+
+
+################################################################################
+### CAPITOLO: 34. System Design
+################################################################################
+
+# 34. System Design
+
+## Obiettivo
+Preparare il ragionamento strutturato richiesto nelle domande di System Design da Senior Software Engineer / Architect.
+
+## Framework di risposta
+1. Functional requirements
+2. Non-functional requirements
+3. Assumptions e capacity estimation
+4. API design
+5. Data model e storage
+6. High-level architecture
+7. Scalability
+8. Availability e reliability
+9. Resilience
+10. Security
+11. Observability
+12. Cost
+13. Trade-offs
+
+## Concetti fondamentali
+- Horizontal vs vertical scaling
+- Stateless vs stateful services
+- Load balancing
+- Caching
+- CDN
+- Queues e asynchronous processing
+- Replication
+- Partitioning e sharding
+- Single Point of Failure
+- Fault tolerance
+- SLA, SLI, SLO, Error Budget
+
+## Capacity Planning
+Esempio: 1M requests/min ≈ 16.667 requests/sec.
+Stimare quindi RPS, peak RPS, database throughput, storage growth, network bandwidth, cache size e CPU/memory.
+
+## Architecture Styles
+- Layered Architecture
+- Modular Monolith
+- Microservices
+- Event-Driven Architecture
+- Hexagonal Architecture
+- Clean Architecture
+- CQRS
+- Event Sourcing
+
+## Pattern architetturali
+- API Gateway
+- Backend for Frontend
+- Saga
+- Transactional Outbox
+- Inbox Pattern
+- Strangler Fig
+- Anti-Corruption Layer
+
+## Domande da colloquio
+1. Progetta un e-commerce.
+2. Progetta un payment system.
+3. Progetta una API da 1M requests/min.
+4. Progetta un sistema di order processing event-driven.
+5. Quando useresti un modular monolith invece dei microservizi?
+6. Come elimineresti un Single Point of Failure?
+7. Come gestiresti un picco di traffico 10x?
+8. Quali trade-off hai scelto e perché?
+
+## Regola Senior
+Non partire dalle tecnologie. Parti da requisiti, vincoli e trade-off, poi scegli le tecnologie che meglio supportano la soluzione.
+
+
+
+################################################################################
+### CAPITOLO: 35. Performance Engineering
+################################################################################
+
+# 35. Performance Engineering
+
+## Obiettivo
+Imparare a diagnosticare e migliorare le performance di applicazioni Java/Spring e sistemi distribuiti.
+
+## Metriche
+- Latency
+- Throughput
+- RPS
+- Concurrency
+- CPU utilization
+- Memory utilization
+- Error rate
+- Saturation
+
+## JVM
+- Heap e allocation rate
+- Garbage Collection
+- GC pauses
+- Thread contention
+- Java Flight Recorder
+- JDK Mission Control
+- Thread dump
+- Heap dump
+- Profiling
+
+## Database
+- Slow queries
+- EXPLAIN / EXPLAIN ANALYZE
+- Index selectivity
+- Cardinality
+- Composite indexes
+- Execution plan
+- Lock contention
+- Connection pool
+
+## Load testing
+- Load test
+- Stress test
+- Spike test
+- Soak test
+- Baseline
+
+## Approccio al troubleshooting
+1. Misurare il problema
+2. Definire baseline e SLO
+3. Identificare il bottleneck
+4. Formulare un'ipotesi
+5. Misurare/profilare
+6. Applicare una modifica
+7. Verificare il risultato
+
+## Domande da colloquio
+1. Un endpoint è diventato lento: da dove parti?
+2. CPU bassa ma latency alta: cosa controlli?
+3. Come analizzi un GC problem?
+4. Come trovi una query lenta?
+5. Come distingui CPU-bound da I/O-bound?
+6. Come dimensioni un connection pool?
+
+## Regola Senior
+Non ottimizzare a intuito: **measure first, identify the bottleneck, change one thing, measure again**.
+
+
+
+################################################################################
+### CAPITOLO: 36. Advanced Microservices e Event Driven
+################################################################################
+
+# 36. Advanced Microservices e Event Driven
+
+## Obiettivo
+Portare la conoscenza dei microservizi dal livello tecnologico al livello architetturale.
+
+## Microservice patterns
+- API Gateway
+- Backend for Frontend
+- Saga
+- Transactional Outbox
+- Inbox Pattern
+- Strangler Fig
+- Anti-Corruption Layer
+
+## Event Driven Architecture
+- Event
+- Command
+- Producer
+- Consumer
+- Broker
+- Event schema
+- Event versioning
+- Schema evolution
+- Event replay
+- Dead Letter Queue
+- Eventual consistency
+
+## Messaging semantics
+- At-most-once
+- At-least-once
+- Exactly-once / effectively-once
+- Ordering
+- Deduplication
+- Idempotency
+- Retry
+- Poison message
+- Backpressure
+
+## CQRS
+Separare il modello di scrittura dal modello di lettura quando i requisiti lo giustificano.
+
+## Event Sourcing
+Lo stato viene ricostruito a partire dalla sequenza degli eventi. Valutare attentamente complessità, storage, replay e schema evolution.
+
+## Inbox Pattern
+Il consumer registra l'evento ricevuto prima di elaborarlo, permettendo di gestire duplicati in modo idempotente.
+
+## Domande da colloquio
+1. Quando useresti Saga?
+2. Outbox vs 2PC?
+3. Come gestisci un evento duplicato?
+4. Come evolvi lo schema di un evento senza rompere i consumer?
+5. CQRS quando è realmente utile?
+6. Event Sourcing: vantaggi e svantaggi?
+7. Come gestisci un consumer che non riesce a processare un messaggio?
+
+
+
+################################################################################
+### CAPITOLO: 37. DDD e Software Architecture
+################################################################################
+
+# 37. DDD e Software Architecture
+
+## Domain-Driven Design
+- Domain
+- Subdomain
+- Core Domain
+- Supporting Subdomain
+- Generic Subdomain
+- Bounded Context
+- Entity
+- Value Object
+- Aggregate
+- Aggregate Root
+- Domain Service
+- Repository
+- Domain Event
+- Context Map
+- Anti-Corruption Layer
+
+## Architecture styles
+- Layered Architecture
+- Modular Monolith
+- Microservices
+- Hexagonal Architecture
+- Clean Architecture
+- Onion Architecture
+- Event-Driven Architecture
+
+## Dependency rule
+Il dominio dovrebbe essere indipendente dai dettagli infrastrutturali. Le dipendenze verso infrastruttura e framework possono essere gestite tramite porte e adapter.
+
+## Modular Monolith vs Microservices
+Valutare:
+- team ownership
+- deployment independence
+- scaling requirements
+- domain boundaries
+- operational complexity
+- network failures
+- consistency requirements
+
+## Domande da colloquio
+1. Cos'è un Bounded Context?
+2. Entity vs Value Object?
+3. Cos'è un Aggregate Root?
+4. Quando useresti un Modular Monolith?
+5. Clean vs Hexagonal Architecture?
+6. Perché i microservizi non sono sempre la scelta migliore?
+
+
+
+################################################################################
+### CAPITOLO: 38. Advanced Security e API Governance
+################################################################################
+
+# 38. Advanced Security e API Governance
+
+## Authentication e Authorization
+- Authentication vs Authorization
+- OAuth2
+- OpenID Connect
+- Authorization Code
+- Client Credentials
+- PKCE
+- Access Token
+- Refresh Token
+- JWT
+- JWKS
+- RBAC
+- ABAC
+
+## Application Security
+- TLS
+- mTLS
+- CORS
+- CSRF
+- XSS
+- SQL Injection
+- SSRF
+- OWASP Top 10
+- Secrets rotation
+- Least privilege
+
+## API Governance
+- OpenAPI
+- API lifecycle
+- API versioning
+- Backward compatibility
+- Breaking changes
+- Error model standardization
+- Consumer compatibility
+- Contract Testing
+
+## Domande da colloquio
+1. OAuth2 vs OIDC?
+2. Authorization Code vs Client Credentials?
+3. Perché PKCE?
+4. JWT firmato vs cifrato?
+5. Come gestisci la rotazione delle chiavi JWT?
+6. Come introduci una breaking change in una API?
+7. Come garantisci la compatibilità tra producer e consumer?
+
+
+
+################################################################################
+### CAPITOLO: 39. SRE Reliability e Chaos Engineering
+################################################################################
+
+# 39. SRE Reliability e Chaos Engineering
+
+## SRE Fundamentals
+- SLI: Service Level Indicator
+- SLO: Service Level Objective
+- SLA: Service Level Agreement
+- Error Budget
+- Availability
+- Reliability
+- Capacity Planning
+- Toil
+
+## Incident Management
+- Detection
+- Triage
+- Mitigation
+- Recovery
+- Root Cause Analysis
+- Blameless Postmortem
+- Corrective Actions
+
+## Disaster Recovery
+- RTO
+- RPO
+- Backup
+- Restore
+- Failover
+- Multi-AZ
+- Multi-Region
+
+## Chaos Engineering
+Validare la resilienza introducendo fault controllati:
+- service failure
+- network latency
+- packet loss
+- database failure
+- pod termination
+- dependency failure
+
+## Domande da colloquio
+1. SLA vs SLO vs SLI?
+2. Cos'è un Error Budget?
+3. Come gestisci un incidente critico?
+4. Come verifichi realmente la resilienza di un sistema?
+5. RTO vs RPO?
+6. Quando introdurresti Chaos Engineering?
+
+## Regola Senior
+La resilienza non va solo dichiarata nell'architettura: deve essere **misurata e validata** attraverso metriche, failure testing e incident review.
 
