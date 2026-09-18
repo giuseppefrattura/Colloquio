@@ -6,7 +6,7 @@
 [![CI/CD](https://img.shields.io/badge/Build-GitHub%20Actions%20CI-green.svg?logo=github-actions)](https://github.com/features/actions)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](#)
 
-> **Un manuale completo, pragmatico e architetturale per superare con successo i colloqui tecnici per posizioni Senior, Lead e Staff Java Software Engineer in contesti Enterprise, FinTech, InsurTech e Mission-Critical.**
+> **Un manuale completo, pragmatico e architetturale per superare con successo i colloqui tecnici per posizioni Senior, Lead, Staff Engineer e Solutions Architect in contesti Enterprise, FinTech, InsurTech e Mission-Critical.**
 
 ---
 
@@ -14,18 +14,20 @@
 
 Nei colloqui tecnici moderni per posizioni **Senior**, non basta saper usare le annotazioni di Spring o ricordare a memoria la sintassi di Java. I Lead Architect e gli Hiring Manager cercano professionisti capaci di:
 
-1. **Padroneggiare la JVM**: comprendere la memoria interna (Heap, Stack, Metaspace), gli algoritmi di Garbage Collection a bassa latenza (G1, ZGC, Shenandoah) e il modello di concorrenza hardware (Virtual Threads, CAS, Memory Visibility).
-2. **Disegnare Sistemi Distribuiti Resilienti**: applicare pattern EIP, architetture a microservizi, consistenza eventuale (Saga, Outbox), streaming di eventi (Kafka) e strategie di persistenza poliglotta (*Polyglot Persistence*).
-3. **Valutare i Trade-off Architetturali**: saper spiegare *perché* scegliere una soluzione rispetto a un'altra (es. *Lock Ottimistico vs Pessimistico*, *Virtual Threads vs Reactive Programming*, *SQL vs NoSQL*, *Kafka vs SQS/RabbitMQ*).
-4. **Governare il Ciclo di Vita del Software**: dal Test-Driven Development (TDD) e Refactoring continuo, alle pipeline di CI/CD, Containerizzazione, Kubernetes e Infrastructure as Code (IaC con Terraform e AWS).
-5. **Esprimere un autentico Product Mindset**: collegare le scelte tecnologiche ai requisiti non funzionali (NFR), agli obiettivi di business (KPI, ROI) e padroneggiare il linguaggio dei **domini applicativi reali** (Pagamenti, Carte, Circuiti ISO 8583/20022, Polizze Vita/Danni, Fondi Pensione, OMS e Riconciliazioni contabili).
-6. **Sfruttare l'Intelligenza Artificiale come Moltiplicatore**: integrare Coding Agents (Claude Code, Cursor, MCP) per accelerare test, refactoring e indagini, mantenendo un rigoroso controllo critico su sicurezza e conformità.
+1. **Padroneggiare la JVM & Performance Engineering**: comprendere la memoria interna (Heap, Stack, Metaspace), gli algoritmi di Garbage Collection a bassa latenza (G1, ZGC, Shenandoah), il profiling con JFR/JMC e il modello di concorrenza hardware (Virtual Threads, CAS, Memory Visibility).
+2. **Disegnare Sistemi Distribuiti Resilienti (System Design)**: applicare il Teorema CAP/PACELC, modelli di consistenza (Strong vs Eventual), pattern EIP, architetture a microservizi, consistenza transazionale distribuita (Saga, Outbox/Inbox), streaming di eventi (Kafka) e strategie di persistenza poliglotta (*Polyglot Persistence*).
+3. **Padroneggiare Domain-Driven Design (DDD) & Clean Architecture**: modellare Bounded Context, Aggregates, Entities, Value Objects, Domain Events e separare nettamente il dominio tramite Architettura Esagonale (Ports & Adapters).
+4. **Valutare i Trade-off Architetturali**: saper spiegare *perché* scegliere una soluzione rispetto a un'altra (es. *Lock Ottimistico vs Pessimistico*, *Virtual Threads vs Reactive WebFlux*, *SQL vs NoSQL*, *Kafka vs RabbitMQ/SQS*).
+5. **Garantire Sicurezza Avanzata e Governance API**: implementare flussi OAuth2/OIDC (PKCE, Client Credentials), mTLS, protezione contro l'OWASP Top 10 e paradigmi Zero Trust.
+6. **Governare il Ciclo di Vita del Software & SRE**: dal Test-Driven Development (TDD) e Refactoring continuo, alle pipeline di CI/CD, Containerizzazione, Kubernetes, IaC (Terraform), fino a SLI/SLO/SLA, Error Budget e Chaos Engineering.
+7. **Esprimere un autentico Product Mindset**: collegare le scelte tecnologiche ai requisiti non funzionali (NFR), agli obiettivi di business (KPI, ROI) e padroneggiare il linguaggio dei **domini applicativi reali** (Pagamenti, Carte, Circuiti ISO 8583/20022, Polizze Vita/Danni, Fondi Pensione, OMS e Riconciliazioni contabili).
+8. **Sfruttare l'Intelligenza Artificiale come Moltiplicatore**: integrare Coding Agents (Claude Code, Cursor, MCP) per accelerare test, refactoring e indagini, mantenendo un rigoroso controllo critico su sicurezza e conformità.
 
 ---
 
-## 📖 Struttura dell'Opera (I 32 Capitoli)
+## 📖 Struttura dell'Opera (I 46 Capitoli)
 
-Il percorso di studio è strutturato in **8 macro-aree logiche**, progettate per guidare il candidato dai fondamenti del linguaggio fino alla governance architetturale e ai domini di business.
+Il percorso di studio è strutturato in **11 macro-aree logiche**, progettate per guidare il candidato dai fondamenti del linguaggio fino alla governance architetturale avanzata, all'ingegneria dei sistemi, ai domini di business, alla sicurezza enterprise e all'osservabilità.
 
 ```
                            MAPPA STRUTTURALE DELL'OPERA
@@ -36,15 +38,21 @@ Il percorso di studio è strutturato in **8 macro-aree logiche**, progettate per
   ├─────────────────────────────────────────────────────────────────────────────┤
   │ 🏛️ PARTE 3: ARCHITETTURA, DESIGN PATTERN E FRAMEWORK (SOLID, Spring, REST) │
   ├─────────────────────────────────────────────────────────────────────────────┤
-  │ 📨 PARTE 4: MESSAGGISTICA, STREAMING & SPECIALISTICO (Kafka, JMS, MQTT, Media)│
+  │ 📨 PARTE 4: MESSAGGISTICA, STREAMING & SPECIALISTICO (Kafka, JMS, MQTT)     │
   ├─────────────────────────────────────────────────────────────────────────────┤
-  │ ☁️ PARTE 5: CLOUD, CONTAINER & INFRASTRUTTURA (Docker, Kubernetes, AWS, IaC)│
+  │ ☁️ PARTE 5: CLOUD, CONTAINER & INFRASTRUTTURA (Docker, Kubernetes, AWS)     │
   ├─────────────────────────────────────────────────────────────────────────────┤
-  │ 🛠️ PARTE 6: TOOLING, TESTING, CI/CD, QUALITÀ & CODING IA (JUnit, Sonar, Agent)│
+  │ 🛠️ PARTE 6: TOOLING, TESTING, CI/CD, QUALITÀ & CODING IA (JUnit, Sonar, IA) │
   ├─────────────────────────────────────────────────────────────────────────────┤
-  │ 👥 PARTE 7: METODOLOGIE, PRODUCT MINDSET & SOFT SKILLS (Agile, ADR, C4, STAR)│
+  │ 👥 PARTE 7: METODOLOGIE, PRODUCT MINDSET & SOFT SKILLS (Agile, ADR, C4)     │
   ├─────────────────────────────────────────────────────────────────────────────┤
   │ 💳 PARTE 8: DOMINI DI BUSINESS (Pagamenti Digitali, Assicurazioni, Finanza) │
+  ├─────────────────────────────────────────────────────────────────────────────┤
+  │ 📐 PARTE 9: SISTEMI DISTRIBUITI, SYSTEM DESIGN, DDD & SRE (Cap. 33 - 39)    │
+  ├─────────────────────────────────────────────────────────────────────────────┤
+  │ 🔬 PARTE 10: DEEP-DIVE SPECIALISTICI (Messaging Adv, Testing Adv, OTel, IaC)│
+  ├─────────────────────────────────────────────────────────────────────────────┤
+  │ 🛡️ PARTE 11: IDENTITY & SICUREZZA ENTERPRISE (OAuth2/OIDC, LDAP/AD, J2EE/API)│
   └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -146,6 +154,46 @@ Il percorso di studio è strutturato in **8 macro-aree logiche**, progettate per
 
 ---
 
+### 📐 Parte 9: Ingegneria dei Sistemi Distribuiti, System Design, DDD & SRE
+* **[33. Distributed Systems Fundamentals](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/33.%20Distributed%20Systems%20Fundamentals/Distributed%20Systems%20Fundamentals.md)**
+  * *Teorema CAP & PACELC, Consistency Models (Strong, Eventual, Causal, Read-your-writes, Monotonic reads), Problemi di rete (Partition, Partial failure, Message loss, Duplicate/Reordering, Clock skew, Split brain), Coordinamento distribuito (Leader election, Quorum, Consensus Paxos/Raft, Distributed Locking).*
+* **[34. System Design](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/34.%20System%20Design/System%20Design.md)**
+  * *Framework strutturato di risposta (Requisiti funzionali/non-funzionali, Capacity estimation, API design, Storage selection, High-level diagram, Deep dives), Scalabilità orizzontale/verticale, Caching layer (L1/L2/CDN), Sharding e Partitioning, Single Point of Failure prevention, Casi reali (URL Shortener, Payment Gateway, Rate Limiter, Notification Service, Trading Engine).*
+* **[35. Performance Engineering](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/35.%20Performance%20Engineering/Performance%20Engineering.md)**
+  * *Metriche prestazionali (Latency percentili p50/p95/p99/p99.9, Throughput RPS, Saturation), Diagnostica e Profiling JVM (Allocation rate, GC pauses, Thread contention, Java Flight Recorder - JFR, JDK Mission Control - JMC, async-profiler), Ottimizzazione DB (Query tuning, Indexing, Connection pool sizing, N+1 fix), Caching e Network bottlenecks.*
+* **[36. Advanced Microservices e Event Driven](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/36.%20Advanced%20Microservices%20e%20Event%20Driven/Advanced%20Microservices%20e%20Event%20Driven.md)**
+  * *Pattern architetturali avanzati: API Gateway, Backend for Frontend (BFF), Saga Pattern (Orchestrata vs Coreografata), Transactional Outbox & Inbox Pattern, Strangler Fig (migrazione monoliti), Anti-Corruption Layer (ACL). Event-Driven: Event Schema versioning, Schema Registry (Avro/Protobuf), Event Replay, Dead Letter Queue (DLQ).*
+* **[37. DDD e Software Architecture](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/37.%20DDD%20e%20Software%20Architecture/DDD%20e%20Software%20Architecture.md)**
+  * *Domain-Driven Design strategico (Core Domain, Supporting/Generic Subdomains, Bounded Context, Context Maps) e tattico (Entities, Value Objects, Aggregates & Aggregate Roots, Domain Services, Domain Events, Repositories). Stili architetturali: Layered, Modular Monolith, Hexagonal Architecture (Ports & Adapters), Clean Architecture, Onion Architecture.*
+* **[38. Advanced Security e API Governance](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/38.%20Advanced%20Security%20e%20API%20Governance/Advanced%20Security%20e%20API%20Governance.md)**
+  * *Authentication & Authorization: OAuth2 & OpenID Connect (Authorization Code con PKCE, Client Credentials), JWT & JWKS validation, RBAC vs ABAC. Application Security: mTLS (Mutual TLS), CORS, CSRF, XSS, SQL Injection, SSRF, OWASP Top 10, API Gateway Governance (Rate Limiting, Throttling, API Key management, Data Masking PII/PCI-DSS).*
+* **[39. SRE Reliability e Chaos Engineering](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/39.%20SRE%20Reliability%20e%20Chaos%20Engineering/SRE%20Reliability%20e%20Chaos%20Engineering.md)**
+  * *Site Reliability Engineering (SRE): SLI (Service Level Indicator), SLO (Service Level Objective), SLA, Error Budget e gestione del rischio di rilascio, Riduzione del Toil. Incident Management: Detection, Triage, Mitigation, Blameless Postmortem e Root Cause Analysis (RCA). Disaster Recovery (RTO, RPO, Active-Active vs Active-Passive). Chaos Engineering (Fault injection: Latency, Packet drop, Kill pod).*
+
+---
+
+### 🔬 Parte 10: Deep-Dive Specialistici (Messaggistica, Testing, Osservabilità e IaC)
+* **[40. Messaging Technologies Advanced](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/40.%20Messaging%20Technologies%20Advanced/Messaging%20Technologies%20Advanced.md)**
+  * *Kafka & RabbitMQ a livello Senior: Producer acks (`acks=0, 1, all`), `linger.ms`, `batch.size`, idempotent producer; Consumer groups, rebalancing, offset commit, consumer lag; Delivery semantics (At-most-once, At-least-once, Exactly-once end-to-end); Partitioning key ordering, retry topic e Dead Letter Topic (DLQ); RabbitMQ (Exchanges direct/topic/fanout, queues, prefetch count, message ack/nack/reject, dead letter exchange DLX); Matrice di trade-off Kafka vs RabbitMQ (stream/log vs queue, smart broker vs smart consumer, retention).*
+* **[41. Automated Testing Advanced](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/41.%20Automated%20Testing%20Advanced/Automated%20Testing%20Advanced.md)**
+  * *Test Pyramid (Unit, Integration, Component, Contract, E2E); Unit test con JUnit 5 e Mockito (`@Mock`, `@InjectMocks`, `ArgumentCaptor`, BDDMockito); Integration test (`@SpringBootTest`, `@WebMvcTest`, MockMvc, WebTestClient); Testcontainers (PostgreSQL, Kafka, RabbitMQ, Redis, LocalStack); Contract Testing con Pact/Spring Cloud Contract; Performance & Load Testing (JMeter, Gatling, k6); Test Flakiness, pipeline speed e test automation best practices.*
+* **[42. Advanced Observability](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/42.%20Advanced%20Observability/OpenTelemetry%20e%20Advanced%20Observability.md)**
+  * *I tre pilastri (Logs, Metrics, Traces); Distributed Tracing (Trace ID, Span ID, Context Propagation, Sampling B3/W3C); OpenTelemetry (OTel SDK, OpenTelemetry Collector, OTLP exporter, auto/manual instrumentation); Metriche chiave e metodologie RED (Rate, Errors, Duration) e USE (Utilization, Saturation, Errors); Correlazione log-tracce con MDC/SLF4J; Alerting intelligente e Google Golden Signals (Latency, Traffic, Errors, Saturation).*
+* **[43. Advanced Infrastructure as Code](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/43.%20Advanced%20Infrastructure%20as%20Code/Advanced%20Infrastructure%20as%20Code.md)**
+  * *Terraform avanzato: HCL, Modules riutilizzabili, Remote State Management con S3 + DynamoDB State Locking, Data sources; Workflow CI/CD per IaC (`terraform fmt → validate → plan → review → apply`); Strategie multi-environment (directory vs workspaces); Drift Detection e remediation; Secret management e governance dell'infrastruttura; Integrazione GitOps (ArgoCD).*
+
+---
+
+### 🛡️ Parte 11: Sicurezza Enterprise, Identity Management & API Security
+* **[44. OAuth2 OpenID Connect e JWT Advanced](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/44.%20OAuth2%20OpenID%20Connect%20e%20JWT%20Advanced/OAuth2%20OpenID%20Connect%20e%20JWT%20Advanced.md)**
+  * *OAuth 2.0 vs OIDC: Attori e flussi (Authorization Code + PKCE per SPA/mobile/frontend, Client Credentials per M2M); Token Lifecycle (Access Token vs Refresh Token, Token Rotation, Revocation); JWT Deep Dive (Header, Payload, Signature, Standard & Custom Claims); Validazione crittografica (JWKS, Asymmetric Key rotation RSA/ECDSA, validation latency & caching); Security best practices (Token theft mitigation, Scopes vs Roles/Permissions).*
+* **[45. LDAP e Active Directory](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/45.%20LDAP%20e%20Active%20Directory/LDAP%20e%20Active%20Directory.md)**
+  * *Fondamenti LDAP (Directory tree, DN, RDN, ObjectClass, Attributes, Base DN, Search Filters RFC 4515); Meccanismi di bind e autenticazione (Direct Bind vs Search & Bind con account di servizio); Microsoft Active Directory (AD DS, Domain Controllers, OU, Security Groups, Kerberos, UPN vs sAMAccountName); Integrazione Java/Spring (Spring Security LDAP, `LdapTemplate`, Connection Pooling, StartTLS / LDAPS su porta 636).*
+* **[46. Sicurezza J2EE SOA e API](file:///Users/giuseppefrattura/Documents/Projects/Colloquio/46.%20Sicurezza%20J2EE%20SOA%20e%20API/Sicurezza%20J2EE%20SOA%20e%20API.md)**
+  * *Principi di sicurezza (Least Privilege, Defense in Depth, Fail Secure, Auditing); Sicurezza J2EE/Jakarta EE (Container-Managed Security, Security Constraints in `web.xml`, JAAS `LoginModule`, Subject/Principal, JACC); Sicurezza SOA & Web Services SOAP (WS-Security, XML Signature, XML Encryption, SAML 2.0 Token Profile); Sicurezza API REST & Microservizi (OWASP API Security Top 10, mTLS, Rate Limiting, API Gateway Policy Enforcement, Input Validation, Sanitization).*
+
+---
+
 ## 🛠️ Metodologia Didattica di Ogni Capitolo
 
 Ogni capitolo della guida adotta un format uniforme orientato all'eccellenza:
@@ -161,7 +209,7 @@ Ogni capitolo della guida adotta un format uniforme orientato all'eccellenza:
 
 Il repository è dotato di una **GitHub Action** automatizzata ([`.github/workflows/generate-full-guide.yml`](file:///.github/workflows/generate-full-guide.yml)) che, ad ogni commit sul branch `main`:
 1. Esegue lo script Python `scripts/merge_chapters.py`.
-2. Concatena tutti i 32 capitoli in ordine numerico progressivo con indice dinamico e separatori formattati.
+2. Concatena tutti i 46 capitoli in ordine numerico progressivo con indice dinamico e separatori formattati.
 3. Genera e pubblica come artefatto di build scaricabile i file unificati:
    * **`guida-colloquio-completa.md`** (formato Markdown completo)
    * **`guida-colloquio-completa.txt`** (formato testo per stampa o consultazione offline rapida)

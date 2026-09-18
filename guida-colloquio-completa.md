@@ -1,7 +1,7 @@
 ================================================================================
 GUIDA DI STUDIO COMPLETA — COLLOQUIO SENIOR JAVA BACKEND DEVELOPER
-Generato automaticamente il: 2026-09-14 14:10:50 UTC
-Totale capitoli inclusi: 39
+Generato automaticamente il: 2026-09-18 05:53:09 UTC
+Totale capitoli inclusi: 46
 ================================================================================
 
 INDICE DEI CAPITOLI:
@@ -44,6 +44,13 @@ INDICE DEI CAPITOLI:
   - 37. DDD e Software Architecture
   - 38. Advanced Security e API Governance
   - 39. SRE Reliability e Chaos Engineering
+  - 40. Messaging Technologies Advanced
+  - 41. Automated Testing Advanced
+  - 42. Advanced Observability
+  - 43. Advanced Infrastructure as Code
+  - 44. OAuth2 OpenID Connect e JWT Advanced
+  - 45. LDAP e Active Directory
+  - 46. Sicurezza J2EE SOA e API
 
 ================================================================================
 
@@ -5010,4 +5017,1133 @@ Validare la resilienza introducendo fault controllati:
 
 ## Regola Senior
 La resilienza non va solo dichiarata nell'architettura: deve essere **misurata e validata** attraverso metriche, failure testing e incident review.
+
+
+
+################################################################################
+### CAPITOLO: 40. Messaging Technologies Advanced
+################################################################################
+
+# 40. Messaging Technologies — Advanced
+
+## Obiettivo
+Approfondire Kafka e RabbitMQ dal punto di vista di un Senior Software Engineer: delivery semantics, ordering, failure handling, scalability e trade-off architetturali.
+
+## Kafka
+
+### Architettura
+- Broker
+- Topic
+- Partition
+- Replica
+- Leader / Follower
+- ISR (In-Sync Replicas)
+- Producer
+- Consumer
+- Consumer Group
+- Offset
+
+### Producer
+Gli `acks` influenzano la durabilità:
+- `acks=0`: nessuna attesa della conferma
+- `acks=1`: conferma dal leader
+- `acks=all`: conferma dopo le repliche ISR richieste
+
+Concetti da conoscere:
+- batching
+- compression
+- retries
+- idempotent producer
+- `linger.ms`
+- `batch.size`
+
+### Consumer
+- Consumer groups
+- Partition assignment
+- Rebalancing
+- Offset commit automatico/manuale
+- `auto.offset.reset`
+- Consumer lag
+
+Un consumer group scala fino al numero di partition: oltre quel limite le istanze aggiuntive non ricevono partition da elaborare.
+
+### Delivery semantics
+- At-most-once
+- At-least-once
+- Exactly-once semantics
+- Effectively-once tramite idempotenza/deduplicazione
+
+In un sistema reale non bisogna confondere "exactly once" del broker con "exactly once" dell'effetto complessivo su DB e servizi esterni.
+
+### Ordering
+Kafka garantisce l'ordine all'interno della singola partition. Per mantenere l'ordine degli eventi di una stessa entità si usa normalmente una key stabile, ad esempio `customerId` o `orderId`.
+
+### Retry e DLQ
+Strategie possibili:
+- retry immediato
+- retry con backoff
+- retry topic
+- Dead Letter Topic
+- gestione dei poison messages
+
+Attenzione ai retry storm: un sistema già degradato può essere ulteriormente sovraccaricato dai retry.
+
+## RabbitMQ
+
+### Architettura
+- Producer
+- Exchange
+- Binding
+- Queue
+- Consumer
+- Routing key
+
+Exchange principali:
+- Direct
+- Topic
+- Fanout
+- Headers
+
+### Consumer
+- Acknowledgement (`ack`)
+- Negative acknowledgement (`nack`)
+- Requeue
+- Prefetch / QoS
+
+Il prefetch limita quanti messaggi possono essere consegnati a un consumer senza acknowledgement, contribuendo al controllo del carico e della fairness.
+
+### Retry e DLQ
+Un messaggio che fallisce può essere:
+- requeued
+- inviato a una dead-letter exchange
+- instradato verso una retry queue con TTL
+
+La strategia deve evitare loop infiniti di retry.
+
+## Kafka vs RabbitMQ
+
+| Aspetto | Kafka | RabbitMQ |
+|---|---|---|
+| Modello | Distributed log | Message broker |
+| Retention | Persistente/configurabile | Tipicamente fino al consumo |
+| Replay | Nativo | Non è il modello principale |
+| Routing | Topic/partition/key | Exchange/binding/routing key |
+| Throughput | Molto elevato | Elevato, orientato al messaging |
+| Ordering | Per partition | Per queue, con limitazioni dovute alla concorrenza |
+| Caso tipico | Event streaming | Task queue / routing |
+
+### Come scegliere
+Usare Kafka quando servono event streaming, alto throughput, consumer multipli indipendenti, retention e replay.
+
+Usare RabbitMQ quando servono routing sofisticato, task queue, acknowledgement e gestione fine della consegna dei messaggi.
+
+## Pattern comuni
+- Transactional Outbox
+- Inbox Pattern
+- Idempotent Consumer
+- Competing Consumers
+- Dead Letter Queue/Topic
+- Retry with Backoff
+- Event Notification
+- Event-Carried State Transfer
+
+## Esempio: pagamento
+`Payment Service` salva la transazione e un evento `PaymentAuthorized`. Con Transactional Outbox, DB update ed evento vengono registrati nella stessa transazione. Un publisher pubblica successivamente l'evento su Kafka. I consumer di accounting, notification e reconciliation elaborano l'evento in modo idempotente.
+
+## Domande da colloquio
+1. Kafka è una queue o un distributed log?
+2. Cosa succede durante un consumer rebalance?
+3. Come garantisci l'ordine degli eventi?
+4. Cosa significa `acks=all`?
+5. At-least-once vs exactly-once?
+6. Come gestisci un messaggio che fallisce continuamente?
+7. Come eviti duplicate processing?
+8. Quando preferisci RabbitMQ a Kafka?
+9. Come dimensioni le partition Kafka?
+10. Come monitori il consumer lag?
+11. Come implementi retry senza creare un retry storm?
+12. Perché Transactional Outbox è utile in un microservizio?
+
+
+
+################################################################################
+### CAPITOLO: 41. Automated Testing Advanced
+################################################################################
+
+# 41. Automated Testing — Advanced
+
+## Obiettivo
+Approfondire il testing di applicazioni Java/Spring e sistemi distribuiti, con particolare attenzione a qualità, velocità della pipeline e fiducia nei rilasci.
+
+## Test Pyramid
+
+Livelli principali:
+- Unit test
+- Integration test
+- Component test
+- Contract test
+- End-to-End test
+
+La maggior parte dei test dovrebbe essere veloce e isolata; i test più costosi e realistici devono essere usati dove aggiungono realmente valore.
+
+## Unit Testing
+Con JUnit 5 e Mockito:
+- testare una singola unità
+- mock delle dipendenze esterne
+- verificare comportamento e risultati
+- evitare di testare dettagli implementativi inutili
+
+### Esempio
+```java
+@ExtendWith(MockitoExtension.class)
+class PaymentServiceTest {
+    @Mock PaymentRepository repository;
+    @InjectMocks PaymentService service;
+
+    @Test
+    void shouldCreatePayment() {
+        // arrange
+        // act
+        // assert
+    }
+}
+```
+
+## Integration Testing
+Serve a verificare l'integrazione reale tra componenti:
+- Spring context
+- database
+- REST API
+- messaging
+- configurazione
+
+Tecnologie utili:
+- `@SpringBootTest`
+- MockMvc
+- WebTestClient
+- Testcontainers
+- WireMock
+
+## Testcontainers
+Permette di eseguire dipendenze reali in container durante i test, ad esempio:
+- PostgreSQL
+- MySQL
+- Kafka
+- RabbitMQ
+- Redis
+
+È preferibile a un database embedded quando si vogliono verificare comportamenti specifici del database reale.
+
+## Contract Testing
+Verifica che producer e consumer rispettino un contratto condiviso senza richiedere un test end-to-end completo.
+
+Concetti:
+- Consumer-driven contract
+- Provider verification
+- Backward compatibility
+- API schema evolution
+
+Strumenti comuni: Pact e Spring Cloud Contract.
+
+## Messaging Testing
+Per Kafka/RabbitMQ verificare:
+- pubblicazione corretta
+- consumo
+- retry
+- DLQ
+- ordering quando richiesto
+- idempotenza
+- gestione degli errori
+
+Con Testcontainers è possibile eseguire test contro un broker reale invece di mockare completamente la messaggistica.
+
+## REST API Testing
+Testare almeno:
+- HTTP status
+- response body
+- validation
+- authentication/authorization
+- error handling
+- backward compatibility
+- timeout/error scenarios
+
+## TDD e BDD
+### TDD
+Ciclo:
+1. Red
+2. Green
+3. Refactor
+
+### BDD
+Descrive il comportamento dal punto di vista del business:
+- Given
+- When
+- Then
+
+BDD è particolarmente utile quando requisiti e comportamento devono essere condivisi tra business e team tecnico.
+
+## CI/CD e Quality Gates
+Una pipeline tipica:
+
+`Build → Unit Tests → Static Analysis → Integration Tests → Contract Tests → Package → Deploy`
+
+Quality gate possibili:
+- test coverage
+- SonarQube
+- SAST
+- dependency vulnerability scan
+- contract verification
+
+## Test Strategy per Microservizi
+Non cercare di verificare tutto con E2E test. Combinare:
+- unit test per business logic
+- integration test per DB/framework
+- contract test per API/eventi
+- pochi E2E test per journey critici
+
+## Domande da colloquio
+1. Unit test vs integration test?
+2. Quando useresti Testcontainers?
+3. Perché evitare di mockare completamente il database?
+4. Cos'è un consumer-driven contract?
+5. Come testeresti un consumer Kafka?
+6. Come testi retry e DLQ?
+7. Qual è una buona test pyramid per microservizi?
+8. TDD è sempre necessario?
+9. Come integri i test nella CI/CD pipeline?
+10. Come eviti test flaky?
+11. Come decidi cosa testare con E2E?
+12. Code coverage elevata significa automaticamente alta qualità?
+
+## Regola Senior
+Il valore del testing non è la percentuale di coverage in sé, ma la capacità della suite di **intercettare regressioni importanti rapidamente e in modo affidabile**.
+
+
+
+################################################################################
+### CAPITOLO: 42. Advanced Observability
+################################################################################
+
+# 42. Advanced Observability e OpenTelemetry
+
+## Obiettivo
+Passare dalla semplice raccolta di log e metriche a una strategia completa di osservabilità per sistemi distribuiti.
+
+## I tre pilastri
+- Logs
+- Metrics
+- Traces
+
+L'obiettivo non è semplicemente raccogliere dati, ma poter rispondere rapidamente a domande come: **cosa è successo, dove, quando e perché?**
+
+## Distributed Tracing
+Una singola richiesta può attraversare API Gateway, microservizi, database e broker.
+
+Concetti:
+- Trace
+- Span
+- Parent/child span
+- Trace ID
+- Span ID
+- Context propagation
+- Sampling
+
+Il Trace ID permette di correlare le diverse operazioni appartenenti alla stessa richiesta distribuita.
+
+## OpenTelemetry
+OpenTelemetry è uno standard/framework open source per generare, raccogliere e esportare telemetry.
+
+Componenti/concepts:
+- Instrumentation
+- SDK
+- Collector
+- Exporter
+- OTLP
+- Traces
+- Metrics
+- Logs
+
+L'OpenTelemetry Collector può ricevere telemetry dalle applicazioni, elaborarla e inoltrarla verso backend differenti senza legare il codice applicativo a un singolo vendor.
+
+## Metrics
+Metriche utili:
+- request rate
+- error rate
+- latency p50/p95/p99
+- CPU
+- memory
+- GC
+- database connections
+- queue depth
+- Kafka consumer lag
+
+### RED Method
+Per i servizi:
+- Rate
+- Errors
+- Duration
+
+### USE Method
+Per le risorse:
+- Utilization
+- Saturation
+- Errors
+
+## Logging
+Best practice:
+- structured logging
+- correlation ID
+- trace ID
+- log levels appropriati
+- evitare dati sensibili
+- centralizzazione
+
+## Alerting
+Un alert dovrebbe rappresentare un problema che richiede un'azione.
+
+Evitare alert basati esclusivamente su metriche tecniche prive di impatto sul servizio. Preferire alert collegati a SLO, error rate, latency e saturation.
+
+## Observability in Microservices
+Una catena tipica:
+
+`Client → API Gateway → Service A → Kafka → Service B → Database`
+
+La propagazione del context permette di seguire la transazione attraverso l'intera catena.
+
+## Esempio di troubleshooting
+Se la latency p99 di `PaymentService` aumenta:
+1. verificare se aumenta anche l'error rate
+2. controllare trace distribuiti
+3. identificare lo span più lento
+4. verificare DB, connection pool o chiamate esterne
+5. correlare con deployment recenti
+6. applicare mitigazione
+7. verificare il ritorno ai valori SLO
+
+## Domande da colloquio
+1. Logs vs metrics vs traces?
+2. Cos'è uno span?
+3. Come propaghi un Trace ID tra microservizi?
+4. Cos'è OpenTelemetry?
+5. Perché usare un Collector?
+6. Perché p95/p99 sono spesso più utili della media?
+7. RED vs USE?
+8. Come monitori il consumer lag Kafka?
+9. Come costruisci un alert efficace?
+10. Come indaghi una latency anomala in un sistema distribuito?
+
+
+
+################################################################################
+### CAPITOLO: 43. Advanced Infrastructure as Code
+################################################################################
+
+# 43. Advanced Infrastructure as Code
+
+## Obiettivo
+Approfondire Infrastructure as Code oltre la semplice conoscenza di Terraform, collegandola a CI/CD, sicurezza, governance e gestione degli ambienti.
+
+## Terraform
+Concetti fondamentali:
+- HCL
+- Resources
+- Data sources
+- Variables
+- Outputs
+- Locals
+- Modules
+- Providers
+- State
+- Remote state
+- State locking
+- Dependencies
+- Drift
+
+## Modules
+I Terraform modules permettono di creare componenti riutilizzabili, ad esempio un modulo per un servizio ECS, una VPC o un database.
+
+Un buon modulo dovrebbe avere interfaccia chiara, pochi input necessari, output significativi e versionamento controllato.
+
+## State Management
+Il Terraform state collega la configurazione dichiarativa alle risorse reali.
+
+In team è opportuno utilizzare:
+- remote backend
+- locking
+- encryption
+- access control
+- versioning
+- backup/recovery dello state
+
+Mai inserire secret direttamente nel repository o nello state senza considerare le implicazioni di sicurezza.
+
+## Workflow
+`terraform fmt → validate → plan → review → apply`
+
+In CI/CD l'`apply` dovrebbe essere controllato e autorizzato, mentre il `plan` può essere prodotto automaticamente come artifact della pipeline.
+
+## Environment Strategy
+Possibili approcci:
+- directory separate
+- workspace
+- repository separati
+- moduli riutilizzabili + configurazioni per ambiente
+
+L'obiettivo è evitare duplicazione mantenendo comunque isolamento e controllo tra dev, staging e production.
+
+## Drift Detection
+Il drift si verifica quando l'infrastruttura reale viene modificata al di fuori di Terraform.
+
+Best practice: ridurre il Click-Ops e fare emergere il drift tramite `terraform plan` e controlli automatizzati.
+
+## Infrastructure as Code nella CI/CD
+Pipeline tipica:
+
+`Git commit → validate → security scan → terraform plan → approval → terraform apply → smoke test`
+
+Possibili controlli:
+- policy as code
+- cost estimation
+- security scanning
+- code review
+- protected environments
+
+## Terraform vs CloudFormation vs AWS CDK
+- **Terraform**: multi-cloud, ampia ecosystem e modello dichiarativo.
+- **CloudFormation**: servizio IaC nativo AWS.
+- **AWS CDK**: definisce infrastruttura AWS usando linguaggi di programmazione e genera CloudFormation.
+
+La scelta dipende da cloud strategy, competenze del team, governance e necessità di portabilità.
+
+## Secrets
+Terraform non deve essere usato come sistema di secret management. Integrare invece secret manager e IAM, limitando esposizione e privilegi.
+
+## Domande da colloquio
+1. Cos'è il Terraform state?
+2. Perché serve il locking?
+3. Come gestisci Terraform in un team?
+4. Cos'è il drift?
+5. Come strutturi dev/staging/prod?
+6. Come integri Terraform in CI/CD?
+7. Come gestisci i secret?
+8. Terraform vs CloudFormation?
+9. Quando preferiresti CDK?
+10. Come impedisci modifiche manuali all'infrastruttura?
+11. Come gestisci un `terraform apply` fallito a metà?
+12. Come fai rollback dell'infrastruttura?
+
+## Regola Senior
+IaC non significa soltanto "creare risorse con Terraform": significa rendere l'infrastruttura **riproducibile, revisionabile, sicura, testabile e governata attraverso il ciclo di vita del software**.
+
+
+
+################################################################################
+### CAPITOLO: 44. OAuth2 OpenID Connect e JWT Advanced
+################################################################################
+
+# 44. OAuth2, OpenID Connect e JWT — Advanced
+
+## Obiettivo
+Approfondire authentication e authorization a livello Senior, distinguendo chiaramente OAuth2, OpenID Connect e JWT e collegandoli alle API e ai microservizi.
+
+## OAuth 2.0
+OAuth2 è un framework per delegare l'accesso a risorse protette.
+
+Concetti:
+- Resource Owner
+- Client
+- Authorization Server
+- Resource Server
+- Access Token
+- Refresh Token
+- Scope
+
+### Authorization Code + PKCE
+Flusso tipico per applicazioni user-facing:
+1. client avvia l'autorizzazione
+2. utente autentica e concede il consenso
+3. authorization server restituisce un authorization code
+4. client scambia il code per token
+5. access token viene utilizzato verso il resource server
+
+PKCE protegge il code exchange soprattutto nei client pubblici.
+
+### Client Credentials
+Utilizzato per machine-to-machine communication quando non esiste un utente coinvolto.
+
+Esempio: `Payment Service → Fraud Service`.
+
+## OpenID Connect
+OIDC estende OAuth2 aggiungendo un livello standard di **autenticazione e identità**.
+
+Concetti:
+- Identity Provider
+- ID Token
+- UserInfo endpoint
+- Claims
+- Discovery
+- JWKS
+
+### OAuth2 vs OIDC
+- OAuth2: autorizzazione/accesso a risorse
+- OIDC: autenticazione/identità sopra OAuth2
+
+## JWT
+Un JWT normalmente contiene:
+- Header
+- Payload
+- Signature
+
+La firma garantisce integrità e autenticità del token, non riservatezza.
+
+### Claims
+Esempi:
+- `iss`
+- `sub`
+- `aud`
+- `exp`
+- `iat`
+- `scope`
+- `roles`
+
+### Validazione
+Il Resource Server dovrebbe verificare almeno:
+- firma
+- issuer
+- audience
+- expiration
+- eventuali scope/ruoli richiesti
+
+## Access Token vs Refresh Token
+L'access token viene utilizzato per accedere alle API e dovrebbe avere lifetime limitata.
+
+Il refresh token permette di ottenere nuovi access token senza richiedere nuovamente il login, con policy di sicurezza e revoca appropriate.
+
+## JWKS e Key Rotation
+Il Resource Server può recuperare le chiavi pubbliche dall'endpoint JWKS dell'Identity Provider.
+
+La rotazione delle chiavi deve permettere un periodo di sovrapposizione in cui sia possibile validare token firmati con la chiave precedente mentre i nuovi token usano la nuova chiave.
+
+## Authorization
+- RBAC: permessi associati a ruoli
+- ABAC: decisione basata su attributi di utente, risorsa e contesto
+- Scopes: permessi delegati tipicamente associati all'access token
+
+## Security pitfalls
+- token troppo longevi
+- mancata validazione `aud`/`iss`
+- secret hardcoded
+- log di access token
+- uso improprio di OAuth2 come autenticazione
+- assenza di TLS
+- gestione insicura dei refresh token
+
+## API Security Architecture
+`Client → API Gateway → Resource Server → Authorization Server`
+
+Il Gateway può applicare rate limiting e policy comuni, mentre l'autorizzazione business-specific dovrebbe rimanere nel servizio che possiede il dominio.
+
+## Domande da colloquio
+1. OAuth2 vs OpenID Connect?
+2. JWT è cifrato o firmato?
+3. Authorization Code vs Client Credentials?
+4. Perché usare PKCE?
+5. Access token vs refresh token?
+6. Come valida un Resource Server un JWT?
+7. Cos'è JWKS?
+8. Come gestisci key rotation?
+9. RBAC vs ABAC?
+10. Dove implementeresti authorization in una architettura a microservizi?
+
+
+
+################################################################################
+### CAPITOLO: 45. LDAP e Active Directory
+################################################################################
+
+# 45. LDAP e Active Directory
+
+## Obiettivo
+Comprendere come integrare applicazioni Java enterprise con directory aziendali come LDAP e Microsoft Active Directory, distinguendo autenticazione, ricerca delle identità e autorizzazione.
+
+## LDAP
+LDAP (Lightweight Directory Access Protocol) è un protocollo per interrogare e modificare directory gerarchiche.
+
+Concetti fondamentali:
+- Directory Server
+- Entry
+- DN (Distinguished Name)
+- RDN (Relative Distinguished Name)
+- Attribute
+- Object Class
+- Schema
+- Base DN
+- Bind
+- Search
+- Filter
+
+Esempio concettuale:
+```text
+DC=company,DC=com
+ ├── OU=Users
+ │    ├── CN=Mario Rossi
+ │    └── CN=Anna Bianchi
+ └── OU=Groups
+      ├── CN=Developers
+      └── CN=Admins
+```
+
+## LDAP Authentication
+Un'applicazione può autenticare un utente effettuando un bind con le sue credenziali oppure utilizzando un account tecnico per cercare l'utente e successivamente verificarne le credenziali.
+
+Flusso tipico:
+```text
+User
+  ↓ username/password
+Application
+  ↓ LDAP search
+Directory
+  ↓ user DN
+Application
+  ↓ bind/authentication
+LDAP Server
+  ↓ success/failure
+Application
+```
+
+## Active Directory
+Microsoft Active Directory Domain Services (AD DS) utilizza LDAP per l'accesso alla directory, ma offre anche altri meccanismi e servizi, tra cui Kerberos, DNS e gestione centralizzata di utenti, gruppi e computer.
+
+Concetti da conoscere:
+- Domain
+- Domain Controller
+- Organizational Unit (OU)
+- Security Group
+- User Principal Name (UPN)
+- Service Account
+- Group Policy
+- Kerberos
+- LDAP/LDAPS
+
+## LDAP vs Active Directory
+LDAP è principalmente un protocollo; Active Directory è una piattaforma directory completa di Microsoft che implementa LDAP e integra altri servizi di dominio.
+
+## LDAPS e sicurezza
+LDAP in chiaro espone le credenziali e i dati della directory. Per proteggere la comunicazione utilizzare:
+- LDAPS (LDAP over TLS)
+- LDAP con StartTLS
+- certificati validati correttamente
+- truststore Java configurato correttamente
+
+Non disabilitare la verifica dei certificati per risolvere problemi TLS in produzione.
+
+## Spring Security + LDAP
+Spring Security può integrare LDAP come Authentication Provider.
+
+Concetti:
+- `LdapBindAuthenticationManagerFactory`
+- LDAP search
+- user DN patterns
+- group search
+- authorities
+- password validation
+
+Esempio concettuale:
+```java
+@Bean
+AuthenticationManager ldapAuthenticationManager(BaseLdapPathContextSource contextSource) {
+    LdapBindAuthenticationManagerFactory factory =
+        new LdapBindAuthenticationManagerFactory(contextSource);
+    factory.setUserSearchBase("ou=Users");
+    factory.setUserSearchFilter("(uid={0})");
+    return factory.createAuthenticationManager();
+}
+```
+
+## Authentication vs Authorization
+LDAP/AD può fornire l'identità e i gruppi dell'utente, ma l'applicazione deve decidere come trasformare quei gruppi in autorizzazioni applicative.
+
+Esempio:
+```text
+AD Group: CN=Payment-Operators
+          ↓
+Application authority: PAYMENT_OPERATOR
+          ↓
+@PreAuthorize("hasAuthority('PAYMENT_OPERATOR')")
+```
+
+## Service Accounts
+Per integrazioni applicative usare account tecnici dedicati con:
+- privilegi minimi
+- password/secret gestiti tramite secret manager
+- rotazione delle credenziali
+- audit degli accessi
+- divieto di utilizzo di account personali
+
+## Caching e disponibilità
+LDAP può diventare una dipendenza critica. Valutare:
+- connection pooling
+- timeout
+- retry controllati
+- caching delle informazioni non sensibili quando appropriato
+- fallback limitati
+- monitoring della directory
+
+Non usare retry aggressivi su LDAP: un Domain Controller degradato può essere ulteriormente sovraccaricato.
+
+## Integrazione enterprise
+Architettura tipica:
+```text
+Browser / Client
+      ↓
+API Gateway
+      ↓
+Spring Boot Application
+      ↓
+Spring Security
+      ↓
+LDAP / Active Directory
+      ↓
+Gruppi / Identità
+```
+
+In architetture moderne LDAP/AD può essere integrato anche con un Identity Provider che espone OAuth2/OIDC, evitando di propagare direttamente le credenziali LDAP alle applicazioni.
+
+## Domande da colloquio
+1. Cos'è LDAP?
+2. LDAP e Active Directory sono la stessa cosa?
+3. Cos'è un DN?
+4. Differenza tra LDAP e LDAPS?
+5. Cos'è un bind LDAP?
+6. Come integreresti Active Directory con Spring Security?
+7. Come trasformi i gruppi AD in ruoli applicativi?
+8. Perché usare un service account?
+9. Come gestisci timeout e indisponibilità del Domain Controller?
+10. LDAP authentication vs OAuth2/OIDC: quando useresti ciascuno?
+11. Come proteggeresti le credenziali LDAP?
+12. Perché non conviene far dipendere ogni microservizio direttamente da AD?
+
+## Regola Senior
+LDAP/Active Directory è spesso un sistema di identità enterprise. In una nuova architettura è importante separare **identity provider, autenticazione e autorizzazione applicativa**, evitando di distribuire credenziali directory tra i microservizi.
+
+
+
+################################################################################
+### CAPITOLO: 46. Sicurezza J2EE SOA e API
+################################################################################
+
+# 46. Sicurezza applicativa in J2EE, SOA e API
+
+## Obiettivo
+Prepararsi alle domande sulla sicurezza applicativa nei sistemi Java enterprise tradizionali (J2EE/Jakarta EE), nelle architetture SOA e nelle moderne API REST/microservizi.
+
+## 1. Security principles
+I principi fondamentali sono:
+- Authentication
+- Authorization
+- Confidentiality
+- Integrity
+- Availability
+- Accountability / Auditing
+- Least Privilege
+- Defense in Depth
+- Secure by Design
+- Fail Secure
+
+Distinguere sempre **chi è l'utente** da **cosa è autorizzato a fare**.
+
+## 2. Sicurezza J2EE / Jakarta EE
+Nei sistemi enterprise Java tradizionali la sicurezza può essere applicata a livello di container e applicazione.
+
+Concetti:
+- Servlet authentication
+- Container-managed security
+- Security constraints
+- Roles
+- JAAS
+- Security realms
+- JACC
+- `web.xml`
+- declarative security
+- programmatic security
+
+Esempio concettuale:
+```xml
+<security-constraint>
+    <web-resource-collection>
+        <web-resource-name>Payments</web-resource-name>
+        <url-pattern>/payments/*</url-pattern>
+    </web-resource-collection>
+    <auth-constraint>
+        <role-name>PAYMENT_OPERATOR</role-name>
+    </auth-constraint>
+</security-constraint>
+```
+
+L'idea fondamentale è separare la configurazione delle policy di sicurezza dal codice business quando il modello container-managed è appropriato.
+
+## 3. JAAS
+Java Authentication and Authorization Service permette di separare il processo di autenticazione dall'applicazione attraverso LoginModule e Subject/Principal.
+
+Concetti da conoscere:
+- Subject
+- Principal
+- LoginContext
+- LoginModule
+- authentication
+- authorization
+
+È soprattutto importante come conoscenza dei sistemi Java enterprise/legacy; nelle architetture moderne è spesso sostituito o affiancato da Spring Security, OAuth2/OIDC e Identity Provider esterni.
+
+## 4. SOA Security
+In una Service-Oriented Architecture i servizi possono essere SOAP/XML o altri protocolli enterprise.
+
+Principali rischi:
+- intercettazione del traffico
+- message tampering
+- replay attack
+- impersonation
+- XML attacks
+- eccessivi privilegi
+- service-to-service trust non controllato
+
+Contromisure:
+- TLS
+- mutual TLS
+- authentication
+- authorization
+- message-level security
+- digital signatures
+- encryption
+- timestamps
+- nonce/replay protection
+- auditing
+
+## 5. WS-Security
+Per SOAP, WS-Security fornisce meccanismi di sicurezza a livello messaggio.
+
+Concetti fondamentali:
+- SOAP Header
+- UsernameToken
+- XML Signature
+- XML Encryption
+- Security Token
+- Timestamp
+- replay protection
+- certificate-based authentication
+
+### Transport vs Message Security
+**TLS** protegge il canale di comunicazione.
+
+**WS-Security** protegge il messaggio SOAP stesso e può mantenere le proprietà di integrità/autenticità anche quando il messaggio attraversa più intermediari.
+
+Esempio architetturale:
+```text
+Client
+  ↓ HTTPS
+Gateway
+  ↓ SOAP / WS-Security
+Service A
+  ↓ SOAP / WS-Security
+Service B
+```
+
+## 6. SAML
+SAML è uno standard XML per lo scambio di assertion relative a identità e autenticazione, molto usato in scenari enterprise SSO.
+
+Concetti:
+- Identity Provider
+- Service Provider
+- Assertion
+- Authentication Statement
+- Attributes
+- SSO
+
+Confronto:
+- SAML: molto comune nell'enterprise e nelle integrazioni SSO legacy
+- OIDC: approccio moderno basato su OAuth2/JSON/JWT, particolarmente adatto a web e API
+
+## 7. API Security
+Una API deve proteggere almeno:
+- Authentication
+- Authorization
+- Input validation
+- Rate limiting
+- TLS
+- Secrets
+- Audit
+- Error handling
+
+Pattern comuni:
+```text
+Client
+  ↓ TLS
+API Gateway
+  ↓ Authentication / Rate limiting
+Resource Server
+  ↓ Authorization
+Business Service
+  ↓
+Database
+```
+
+## 8. API Authentication
+Meccanismi da conoscere:
+- API Key
+- Basic Authentication
+- OAuth2 Bearer Token
+- JWT
+- mTLS
+- signed requests
+
+In generale evitare Basic Authentication per nuove API se esistono alternative adeguate; usare sempre TLS quando vengono trasmesse credenziali o token.
+
+## 9. OAuth2 / OIDC / JWT
+### OAuth2
+Framework per delegare l'accesso a risorse protette.
+
+### OIDC
+Estensione di OAuth2 per authentication e identity.
+
+### JWT
+Formato di token firmato che contiene claims.
+
+Validare sempre:
+- signature
+- issuer
+- audience
+- expiration
+- not-before quando applicabile
+- scopes/roles
+
+Non inserire dati sensibili inutili nei JWT e non confondere firma con cifratura.
+
+## 10. Authorization
+Possibili modelli:
+- RBAC
+- ABAC
+- scope-based authorization
+- resource-based authorization
+
+Esempio:
+```text
+JWT
+ ├── sub = user123
+ ├── scope = payment.read payment.write
+ └── roles = PAYMENT_OPERATOR
+          ↓
+Authorization policy
+          ↓
+POST /payments → payment.write
+```
+
+## 11. OWASP e minacce API
+Conoscere almeno:
+- Broken Access Control
+- Injection
+- Security Misconfiguration
+- Cryptographic Failures
+- Identification and Authentication Failures
+- SSRF
+- XSS quando esiste una componente browser
+- insecure deserialization
+- excessive data exposure
+- mass assignment
+- rate abuse
+
+## 12. API Gateway e Security Boundary
+Il Gateway può centralizzare:
+- TLS termination
+- authentication
+- rate limiting
+- request size limits
+- routing
+- audit/correlation ID
+
+Ma non deve diventare l'unico punto di authorization: i microservizi devono verificare le autorizzazioni necessarie alle proprie risorse e regole di dominio.
+
+## 13. Service-to-Service Security
+In un'architettura a microservizi valutare:
+- OAuth2 Client Credentials
+- mTLS
+- workload identity
+- short-lived tokens
+- least privilege
+- secret rotation
+
+Non usare un'unica credenziale condivisa da tutti i microservizi.
+
+## 14. Input e output security
+Validare:
+- payload JSON/XML
+- parametri URL
+- headers
+- file upload
+- content type
+- dimensioni massime
+
+Per XML considerare:
+- XXE
+- entity expansion
+- external entity access
+- parser hardening
+
+Non restituire stack trace, SQL exception o dettagli infrastrutturali al client.
+
+## 15. Security logging e auditing
+Registrare eventi rilevanti:
+- login riusciti/falliti
+- authorization failures
+- modifiche ai privilegi
+- accesso a dati sensibili
+- operazioni amministrative
+- eventi di sicurezza
+
+Non loggare:
+- password
+- access token
+- refresh token
+- secret
+- PAN completo o altri dati sensibili non necessari
+
+## 16. Domande da colloquio
+1. Come proteggeresti una applicazione J2EE?
+2. Container-managed security vs programmatic security?
+3. Cos'è JAAS?
+4. Cos'è WS-Security?
+5. TLS e WS-Security risolvono lo stesso problema?
+6. XML Signature vs XML Encryption?
+7. Cos'è SAML e quando lo useresti?
+8. OAuth2 vs OIDC?
+9. JWT è cifrato o firmato?
+10. Come proteggi una REST API?
+11. Dove metti authentication e authorization in una architettura con API Gateway?
+12. Come proteggi la comunicazione tra microservizi?
+13. Come previeni replay attack?
+14. Come gestisci la rotazione dei secret e delle chiavi?
+15. Come proteggeresti una SOAP API legacy?
+16. Quali rischi specifici presenta XML?
+
+## Scenario Senior
+Supponiamo di dover integrare una nuova API REST con un sistema legacy SOAP/J2EE autenticato tramite Active Directory.
+
+Una possibile architettura è:
+```text
+User / Client
+      ↓ OAuth2 / OIDC
+API Gateway
+      ↓ JWT
+REST Service
+      ↓ service identity / mTLS
+Integration Service
+      ↓ WS-Security + TLS
+Legacy SOAP/J2EE
+      ↓
+LDAP / Active Directory
+```
+
+Il punto importante non è usare una singola tecnologia ovunque, ma creare **security boundaries** chiari e tradurre correttamente identità, autorizzazioni e trust tra sistemi moderni e legacy.
+
+## Regola Senior
+La sicurezza non è una singola libreria o un filtro HTTP. È una proprietà dell'intera architettura: **identity, transport security, message security, authorization, secrets, input validation, auditing, monitoring e gestione del ciclo di vita delle credenziali** devono essere progettati insieme.
 
