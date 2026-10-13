@@ -10,13 +10,30 @@ def load_chapters(repo_root):
         if not directory.is_dir() or not re.match(r"^\d{2}\.", directory.name):
             continue
         sources = sorted(directory.glob("*.md"))
-        if len(sources) != 1:
-            raise ValueError(f"Atteso un solo capitolo Markdown in {directory.name}")
-        content = sources[0].read_text(encoding="utf-8").strip()
-        lines = content.splitlines()
-        if not lines or not lines[0].startswith("# "):
-            raise ValueError(f"Titolo principale mancante in {sources[0]}")
-        chapters.append((directory.name[:2], lines[0][2:], content))
+        if not sources:
+            raise ValueError(f"Nessun capitolo Markdown in {directory.name}")
+        main_source = directory / (directory.name[3:].strip() + ".md")
+        if main_source not in sources:
+            if len(sources) != 1:
+                raise ValueError(
+                    f"Capitolo principale ambiguo in {directory.name}: "
+                    f"creare {main_source.name} per identificare il capitolo principale"
+                )
+            main_source = sources[0]
+        ordered_sources = [main_source] + [source for source in sources if source != main_source]
+        sections = []
+        title = None
+        for source in ordered_sources:
+            content = source.read_text(encoding="utf-8").strip()
+            lines = content.splitlines()
+            if not lines or not lines[0].startswith("# "):
+                raise ValueError(f"Titolo principale mancante in {source}")
+            if source == main_source:
+                title = lines[0][2:]
+                sections.append(content)
+            else:
+                sections.append(lower_headings(content))
+        chapters.append((directory.name[:2], title, "\n\n".join(sections)))
     if not chapters:
         raise ValueError("Nessun capitolo trovato")
     return chapters

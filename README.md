@@ -130,4 +130,6 @@ I file nelle cartelle numerate sono le sorgenti dei capitoli. Dopo averli modifi
 python3 scripts/merge_chapters.py
 ```
 
-Lo script include la prefazione e tutti i capitoli in ordine, costruisce l’indice navigabile e conserva gli esempi di codice. La versione TXT rimuove la sintassi editoriale Markdown. La generazione è ripetibile a parità di sorgenti e segnala cartelle prive di un capitolo principale o con sorgenti ambigue. Il workflow GitHub Actions usa lo stesso comando per produrre gli artefatti.
+Lo script include la prefazione e tutti i capitoli in ordine, costruisce l’indice navigabile e conserva gli esempi di codice. Se una cartella contiene più file Markdown, il capitolo principale deve avere lo stesso nome della cartella senza il numero iniziale (per esempio `03. Database` → `Database.md`). Gli altri file vengono inclusi dopo il capitolo principale come approfondimenti, in ordine alfabetico e con i titoli abbassati di un livello. Quando la cartella contiene un solo file Markdown, il nome del file può essere diverso.
+
+La versione TXT rimuove la sintassi editoriale Markdown. La generazione è ripetibile a parità di sorgenti e segnala cartelle prive di un capitolo principale o con sorgenti ambigue. Il workflow GitHub Actions verifica i test di regressione e usa lo stesso comando per produrre gli artefatti.
