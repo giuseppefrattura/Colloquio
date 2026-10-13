@@ -1,16 +1,16 @@
-# 11. WebSocket e Comunicazione Real-Time
+# 11. WebSocket e comunicazione in tempo reale
 
-### Cos'è
-Protocollo di comunicazione che stabilisce una connessione **full-duplex persistente** tra client e server su un singolo socket TCP — a differenza di HTTP tradizionale (richiesta/risposta, connessione chiusa dopo ogni scambio), con WebSocket sia client che server possono inviare messaggi in qualsiasi momento sulla stessa connessione aperta.
+## Ricevere aggiornamenti senza interrogare continuamente il server
 
-### Caratteristiche principali
+Una dashboard di pagamenti deve mostrare cambiamenti di stato anche quando l'utente non avvia nuove richieste. Con il **polling** il client interroga periodicamente il server: la frequenza determina traffico e ritardo massimo di osservazione. WebSocket offre un canale persistente e **full-duplex**, cioè utilizzabile in entrambe le direzioni.
 
-- **Handshake iniziale via HTTP**: la connessione parte come una normale richiesta HTTP con header `Upgrade: websocket`, poi "sale di livello" a una connessione WebSocket persistente
-- **Full-duplex**: comunicazione bidirezionale simultanea, non serve che il client "chieda" per ricevere un aggiornamento dal server (a differenza del polling HTTP tradizionale)
-- **Basso overhead**: dopo l'handshake iniziale, i messaggi successivi hanno un overhead molto ridotto rispetto a ripetute richieste HTTP, rendendolo adatto ad aggiornamenti frequenti e a bassa latenza
-- **STOMP su WebSocket**: in Spring, si usa spesso il protocollo STOMP sopra WebSocket per avere un modello a messaggi/topic più strutturato (simile a un message broker), invece di gestire i frame WebSocket grezzi
+HTTP mantiene il modello richiesta-risposta, ma può riutilizzare connessioni persistenti: non è corretto dire che ogni scambio ne imponga la chiusura. La differenza decisiva è il modello di comunicazione. Con WebSocket il server può inviare un messaggio applicativo sulla connessione già aperta. Il protocollo è definito dalla [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455).
 
-### Esempio di utilizzo (Spring Boot)
+## Stabilire il canale e organizzare i messaggi
+
+Nel handshake HTTP/1.1 comune, il client richiede l'upgrade e il server accetta il passaggio al protocollo WebSocket. Dopo il handshake i dati viaggiano in **frame**, unità del protocollo. L'applicazione definisce ancora formato, significato e instradamento dei messaggi.
+
+**STOMP**, Simple Text Oriented Messaging Protocol, aggiunge un modello di invio e sottoscrizione a destinazioni sopra WebSocket. In Spring puoi usare il broker semplice per scenari limitati o un'integrazione con un broker esterno. **SockJS** fornisce un insieme di trasporti alternativi quando il collegamento WebSocket non è utilizzabile; non aggiunge automaticamente le garanzie di elaborazione del dominio.
 
 ```java
 @Configuration
@@ -27,23 +27,18 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setApplicationDestinationPrefixes("/app");
     }
 }
-
-// Invio di un aggiornamento in tempo reale
-@Autowired
-private SimpMessagingTemplate messagingTemplate;
-
-public void notifyTransactionStatus(String accountId, TransactionStatus status) {
-    messagingTemplate.convertAndSend("/topic/account/" + accountId, status);
-}
 ```
 
-### Rilevanza per il dominio pagamenti
-Utile per **notifiche in tempo reale** verso un frontend/dashboard — ad esempio aggiornare istantaneamente lo stato di una transazione mentre viene processata (in attesa → autorizzata → completata), senza che il client debba fare polling continuo. Rilevante anche per dashboard operative interne che monitorano transazioni live o alert su anomalie.
+Il frammento illustra endpoint e prefissi; non include configurazione di autenticazione e autorizzazione. Una destinazione come `/topic/account/{id}` non è protetta perché contiene un account ID: il server deve verificare chi può sottoscriverla e inviarvi messaggi.
 
-### Domande tipiche e risposte
+## Connessioni lunghe, interruzioni e recupero
 
-- *D: Perché non usare semplicemente il polling HTTP per aggiornamenti in tempo reale?*
-  R: Il polling genera traffico costante anche quando non ci sono aggiornamenti reali, introduce latenza (l'aggiornamento arriva solo al prossimo poll) e non scala bene con molti client. WebSocket mantiene una connessione aperta e il server può inviare aggiornamenti nell'istante in cui accadono, con overhead molto minore.
+Una connessione persistente occupa risorse. Occorrono limiti, rilevazione delle disconnessioni e politiche di riconnessione. Un **heartbeat** segnala che il collegamento è ancora utilizzabile secondo il protocollo scelto, ma non prova che l'operazione di business sia stata completata.
 
-- *D: WebSocket è adatto per comunicazione tra microservizi?*
-  R: Non è la scelta tipica — tra servizi backend si preferisce REST/gRPC (sincrono) o un message broker come Kafka/RabbitMQ (asincrono), entrambi più adatti a comunicazione server-to-server con garanzie di delivery/retry. WebSocket è pensato principalmente per comunicazione client-server in tempo reale (es. verso un frontend o un'app mobile).
+Se il client si scollega, non si presume che riceva automaticamente gli aggiornamenti mancati. Una strategia utile è rileggere lo stato autorevole alla riconnessione e poi riprendere le notifiche, usando versioni o sequenze quando necessario. Con più istanze server si progetta come raggiungere le sessioni collegate e come condividere gli eventi.
+
+## Scegliere in base al tipo di aggiornamento
+
+Per messaggi bidirezionali frequenti WebSocket può essere appropriato. Per un flusso principalmente dal server al browser si possono valutare anche **Server-Sent Events**, mentre il polling può bastare per aggiornamenti rari. Tra servizi che richiedono persistenza, retry e consumo indipendente, un broker offre un modello diverso e spesso più adatto.
+
+Per esercitarti, segui uno stato «in lavorazione» che diventa «completato» mentre il browser perde la connessione. Spiega come l'utente recupera il risultato e perché la notifica non deve diventare l'unica fonte dello stato del pagamento.

@@ -1,39 +1,17 @@
-# 46. Sicurezza applicativa in J2EE, SOA e API
+# 46. Sicurezza in Java enterprise, SOA e API
 
-## Obiettivo
-Prepararsi alle domande sulla sicurezza applicativa nei sistemi Java enterprise tradizionali (J2EE/Jakarta EE), nelle architetture SOA e nelle moderne API REST/microservizi.
+## Proprietà da conservare lungo l'integrazione
 
-## 1. Security principles
-I principi fondamentali sono:
-- Authentication
-- Authorization
-- Confidentiality
-- Integrity
-- Availability
-- Accountability / Auditing
-- Least Privilege
-- Defense in Depth
-- Secure by Design
-- Fail Secure
+L'autenticazione verifica l'identità; l'autorizzazione limita le azioni. La **riservatezza** impedisce letture non autorizzate, l'**integrità** protegge da modifiche non consentite e la **disponibilità** consente l'uso del servizio. L'**accountability** permette di ricostruire azioni e responsabilità mediante evidenze e audit. Queste proprietà devono attraversare i confini tra applicazioni, non fermarsi al login.
 
-Distinguere sempre **chi è l'utente** da **cosa è autorizzato a fare**.
+Minimo privilegio, difesa su più livelli e secure by design guidano il progetto. **Fail secure** significa che un guasto non deve aprire accessi prima vietati. Un filtro che accetta tutto quando la directory non risponde potrebbe ripristinare il traffico compromettendo l'autorizzazione.
 
-## 2. Sicurezza J2EE / Jakarta EE
-Nei sistemi enterprise Java tradizionali la sicurezza può essere applicata a livello di container e applicazione.
+## Sicurezza gestita dal container
 
-Concetti:
-- Servlet authentication
-- Container-managed security
-- Security constraints
-- Roles
-- JAAS
-- Security realms
-- JACC
-- `web.xml`
-- declarative security
-- programmatic security
+Nei sistemi J2EE e Jakarta EE il container può gestire l'autenticazione Servlet e controllare l'accesso alle risorse. La **container-managed security** separa parte della politica dal codice di business. Un **security realm** rappresenta il dominio di autenticazione configurato nel prodotto; i **role** collegano identità e permessi.
 
-Esempio concettuale:
+La sicurezza **dichiarativa** usa configurazioni e annotazioni; quella **programmatica** esegue controlli nel codice, per esempio sui ruoli della richiesta. Nel descrittore `web.xml`, un **security constraint** collega percorsi e ruoli:
+
 ```xml
 <security-constraint>
     <web-resource-collection>
@@ -46,269 +24,54 @@ Esempio concettuale:
 </security-constraint>
 ```
 
-L'idea fondamentale è separare la configurazione delle policy di sicurezza dal codice business quando il modello container-managed è appropriato.
+Questo frammento dichiara un vincolo, ma non configura da solo autenticazione, mapping dei ruoli e trasporto. **JACC**, Java Authorization Contract for Containers, definisce un contratto per l'integrazione di decisioni di autorizzazione nei container; rilevanza e supporto dipendono dalla generazione della piattaforma.
 
-## 3. JAAS
-Java Authentication and Authorization Service permette di separare il processo di autenticazione dall'applicazione attraverso LoginModule e Subject/Principal.
+## JAAS nei sistemi esistenti
 
-Concetti da conoscere:
-- Subject
-- Principal
-- LoginContext
-- LoginModule
-- authentication
-- authorization
+**JAAS**, Java Authentication and Authorization Service, separa alcuni meccanismi di autenticazione dal codice chiamante. Il **LoginContext** coordina i moduli di login configurati; un **LoginModule** verifica credenziali secondo il proprio meccanismo. Il **Subject** rappresenta il soggetto autenticato e può contenere **Principal**, identità o attributi riconosciuti.
 
-È soprattutto importante come conoscenza dei sistemi Java enterprise/legacy; nelle architetture moderne è spesso sostituito o affiancato da Spring Security, OAuth2/OIDC e Identity Provider esterni.
+Il modello storico di autorizzazione JAAS va letto nel contesto del runtime Java e del container usato. Conoscere Subject e LoginModule aiuta a capire un'integrazione legacy, ma non significa che ogni nuova API debba adottare quella stessa architettura.
 
-## 4. SOA Security
-In una Service-Oriented Architecture i servizi possono essere SOAP/XML o altri protocolli enterprise.
+## SOA: proteggere trasporto e messaggio
 
-Principali rischi:
-- intercettazione del traffico
-- message tampering
-- replay attack
-- impersonation
-- XML attacks
-- eccessivi privilegi
-- service-to-service trust non controllato
+Una **Service-Oriented Architecture**, SOA, integra servizi tramite contratti; nelle piattaforme enterprise può usare SOAP e XML. Il **message tampering** modifica un messaggio, l'**impersonation** presenta una falsa identità e il **replay attack** reinvia un messaggio valido per ripeterne l'effetto.
 
-Contromisure:
-- TLS
-- mutual TLS
-- authentication
-- authorization
-- message-level security
-- digital signatures
-- encryption
-- timestamps
-- nonce/replay protection
-- auditing
+TLS protegge il canale tra due endpoint. Con un gateway intermedio il messaggio viene elaborato e può essere inoltrato su un altro canale. La **message-level security** protegge elementi del messaggio stesso, consentendo alcune verifiche anche attraverso intermediari, purché questi rispettino le parti protette.
 
-## 5. WS-Security
-Per SOAP, WS-Security fornisce meccanismi di sicurezza a livello messaggio.
+## WS-Security e XML
 
-Concetti fondamentali:
-- SOAP Header
-- UsernameToken
-- XML Signature
-- XML Encryption
-- Security Token
-- Timestamp
-- replay protection
-- certificate-based authentication
+**WS-Security** definisce meccanismi per inserire token e protezioni nei messaggi SOAP, spesso nel SOAP Header. Un **UsernameToken** trasporta informazioni di autenticazione secondo un profilo; non elimina il bisogno di proteggere le credenziali. **XML Signature** firma parti del messaggio, mentre **XML Encryption** ne cifra parti. I certificati possono sostenere autenticazione e verifica della firma.
 
-### Transport vs Message Security
-**TLS** protegge il canale di comunicazione.
+La firma non garantisce freschezza. Un timestamp delimita il periodo accettabile; un **nonce**, valore usato una volta, e una registrazione delle richieste già viste possono contribuire alla protezione dal replay. Il ricevente deve verificare sia le parti firmate sia che siano proprio quelle interpretate dal codice di business. Firmare un elemento e usare un altro elemento non fidato vanifica il controllo.
 
-**WS-Security** protegge il messaggio SOAP stesso e può mantenere le proprietà di integrità/autenticità anche quando il messaggio attraversa più intermediari.
+I parser XML devono essere configurati rispetto a entità esterne, espansione e dimensioni. **XXE** può indurre accessi a risorse locali o remote; l'espansione di entità può esaurire risorse. La sicurezza del protocollo non rende sicuro un parser configurato male.
 
-Esempio architetturale:
-```text
-Client
-  ↓ HTTPS
-Gateway
-  ↓ SOAP / WS-Security
-Service A
-  ↓ SOAP / WS-Security
-Service B
-```
+## SAML e federazione dell'identità
 
-## 6. SAML
-SAML è uno standard XML per lo scambio di assertion relative a identità e autenticazione, molto usato in scenari enterprise SSO.
+**SAML**, Security Assertion Markup Language, scambia dichiarazioni XML sull'identità. L'**Identity Provider**, IdP, autentica; il **Service Provider**, SP, riceve una **assertion** destinata a lui. Un authentication statement descrive l'autenticazione e gli attributi portano informazioni autorizzate sul soggetto.
 
-Concetti:
-- Identity Provider
-- Service Provider
-- Assertion
-- Authentication Statement
-- Attributes
-- SSO
+Il **Single Sign-On**, SSO, consente di usare l'autenticazione del provider per più applicazioni. Il ricevente verifica firma, destinatario, tempi e collegamento al flusso atteso: una assertion non è una credenziale universale. OIDC affronta la federazione con un modello differente, costruito su OAuth 2.0; la scelta dipende dai sistemi da integrare.
 
-Confronto:
-- SAML: molto comune nell'enterprise e nelle integrazioni SSO legacy
-- OIDC: approccio moderno basato su OAuth2/JSON/JWT, particolarmente adatto a web e API
+## Portare le stesse proprietà sulle API
 
-## 7. API Security
-Una API deve proteggere almeno:
-- Authentication
-- Authorization
-- Input validation
-- Rate limiting
-- TLS
-- Secrets
-- Audit
-- Error handling
+Un'**API key** identifica un client o un accesso secondo il contratto. Basic Authentication trasmette credenziali codificate, non cifrate autonomamente. Un **bearer token** consente l'accesso a chi lo possiede; mTLS associa l'accesso a un certificato client. Le **signed request** legano una firma ai dati della richiesta e richiedono regole di canonicalizzazione e protezione dal replay.
 
-Pattern comuni:
-```text
-Client
-  ↓ TLS
-API Gateway
-  ↓ Authentication / Rate limiting
-Resource Server
-  ↓ Authorization
-Business Service
-  ↓
-Database
-```
+OAuth e OIDC separano delega e autenticazione. Per un JWT firmato, il resource server verifica firma, `iss`, `aud` e tempi, poi scope e politiche sulla risorsa. Il capitolo 44 sviluppa il flusso completo. RBAC usa ruoli; ABAC attributi; l'autorizzazione resource-based considera anche appartenenza e stato dell'oggetto.
 
-## 8. API Authentication
-Meccanismi da conoscere:
-- API Key
-- Basic Authentication
-- OAuth2 Bearer Token
-- JWT
-- mTLS
-- signed requests
+## Rischi che attraversano tutti gli strati
 
-In generale evitare Basic Authentication per nuove API se esistono alternative adeguate; usare sempre TLS quando vengono trasmesse credenziali o token.
+Il **broken access control** consente azioni o letture indebite. Una misconfiguration espone funzioni o risorse non previste. L'injection interpreta input come istruzioni; una deserializzazione insicura può accettare strutture o tipi pericolosi. L'**excessive data exposure** restituisce dati oltre il necessario, mentre il **mass assignment** permette di modificare campi che il client non dovrebbe controllare, come lo stato di approvazione.
 
-## 9. OAuth2 / OIDC / JWT
-### OAuth2
-Framework per delegare l'accesso a risorse protette.
+Un gateway centralizza routing, limiti di richiesta e controlli comuni, ma il servizio mantiene i permessi sul dominio. La **TLS termination** conclude il canale TLS al gateway: il collegamento successivo richiede una decisione propria. Correlation ID e audit collegano le operazioni senza sostituire l'autorizzazione.
 
-### OIDC
-Estensione di OAuth2 per authentication e identity.
+Per le chiamate tra servizi si usano identità dedicate, token a durata limitata e permessi minimi. La **workload identity** associa credenziali al carico applicativo attraverso la piattaforma, riducendo la necessità di distribuire segreti statici. Rotazione e revoca devono coprire anche queste identità.
 
-### JWT
-Formato di token firmato che contiene claims.
+## Input, output e audit
 
-Validare sempre:
-- signature
-- issuer
-- audience
-- expiration
-- not-before quando applicabile
-- scopes/roles
+Payload, parametri, header e file richiedono vincoli su tipo, contenuto e dimensione. Gli errori pubblici non espongono stack trace o dettagli SQL. L'audit registra accessi sensibili, modifiche ai privilegi e operazioni amministrative con protezioni contro alterazione e lettura indebita. Non deve contenere password, token, segreti o numeri completi di carta non necessari.
 
-Non inserire dati sensibili inutili nei JWT e non confondere firma con cifratura.
+## Un'integrazione da seguire fino al sistema legacy
 
-## 10. Authorization
-Possibili modelli:
-- RBAC
-- ABAC
-- scope-based authorization
-- resource-based authorization
+Immagina una nuova API REST davanti a un servizio SOAP autenticato tramite Active Directory. Il client usa OIDC per il login e un access token per l'API; il servizio integra il legacy mediante un'identità dedicata, TLS e le protezioni WS-Security richieste. In ogni passaggio si chiariscono soggetto rappresentato, destinatario e permessi.
 
-Esempio:
-```text
-JWT
- ├── sub = user123
- ├── scope = payment.read payment.write
- └── roles = PAYMENT_OPERATOR
-          ↓
-Authorization policy
-          ↓
-POST /payments → payment.write
-```
-
-## 11. OWASP e minacce API
-Conoscere almeno:
-- Broken Access Control
-- Injection
-- Security Misconfiguration
-- Cryptographic Failures
-- Identification and Authentication Failures
-- SSRF
-- XSS quando esiste una componente browser
-- insecure deserialization
-- excessive data exposure
-- mass assignment
-- rate abuse
-
-## 12. API Gateway e Security Boundary
-Il Gateway può centralizzare:
-- TLS termination
-- authentication
-- rate limiting
-- request size limits
-- routing
-- audit/correlation ID
-
-Ma non deve diventare l'unico punto di authorization: i microservizi devono verificare le autorizzazioni necessarie alle proprie risorse e regole di dominio.
-
-## 13. Service-to-Service Security
-In un'architettura a microservizi valutare:
-- OAuth2 Client Credentials
-- mTLS
-- workload identity
-- short-lived tokens
-- least privilege
-- secret rotation
-
-Non usare un'unica credenziale condivisa da tutti i microservizi.
-
-## 14. Input e output security
-Validare:
-- payload JSON/XML
-- parametri URL
-- headers
-- file upload
-- content type
-- dimensioni massime
-
-Per XML considerare:
-- XXE
-- entity expansion
-- external entity access
-- parser hardening
-
-Non restituire stack trace, SQL exception o dettagli infrastrutturali al client.
-
-## 15. Security logging e auditing
-Registrare eventi rilevanti:
-- login riusciti/falliti
-- authorization failures
-- modifiche ai privilegi
-- accesso a dati sensibili
-- operazioni amministrative
-- eventi di sicurezza
-
-Non loggare:
-- password
-- access token
-- refresh token
-- secret
-- PAN completo o altri dati sensibili non necessari
-
-## 16. Domande da colloquio
-1. Come proteggeresti una applicazione J2EE?
-2. Container-managed security vs programmatic security?
-3. Cos'è JAAS?
-4. Cos'è WS-Security?
-5. TLS e WS-Security risolvono lo stesso problema?
-6. XML Signature vs XML Encryption?
-7. Cos'è SAML e quando lo useresti?
-8. OAuth2 vs OIDC?
-9. JWT è cifrato o firmato?
-10. Come proteggi una REST API?
-11. Dove metti authentication e authorization in una architettura con API Gateway?
-12. Come proteggi la comunicazione tra microservizi?
-13. Come previeni replay attack?
-14. Come gestisci la rotazione dei secret e delle chiavi?
-15. Come proteggeresti una SOAP API legacy?
-16. Quali rischi specifici presenta XML?
-
-## Scenario Senior
-Supponiamo di dover integrare una nuova API REST con un sistema legacy SOAP/J2EE autenticato tramite Active Directory.
-
-Una possibile architettura è:
-```text
-User / Client
-      ↓ OAuth2 / OIDC
-API Gateway
-      ↓ JWT
-REST Service
-      ↓ service identity / mTLS
-Integration Service
-      ↓ WS-Security + TLS
-Legacy SOAP/J2EE
-      ↓
-LDAP / Active Directory
-```
-
-Il punto importante non è usare una singola tecnologia ovunque, ma creare **security boundaries** chiari e tradurre correttamente identità, autorizzazioni e trust tra sistemi moderni e legacy.
-
-## Regola Senior
-La sicurezza non è una singola libreria o un filtro HTTP. È una proprietà dell'intera architettura: **identity, transport security, message security, authorization, secrets, input validation, auditing, monitoring e gestione del ciclo di vita delle credenziali** devono essere progettati insieme.
+Il punto delicato è la traduzione della fiducia: il servizio legacy non deve attribuire a ogni chiamata i privilegi massimi dell'account tecnico. Per esercitarti, descrivi come vengono conservati identità, autorizzazione e riferimenti di audit e come viene impedito il replay di un'operazione sensibile.

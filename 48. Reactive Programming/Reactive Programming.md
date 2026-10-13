@@ -1,117 +1,45 @@
-# 48. Reactive Programming
+# 48. Programmazione reattiva
 
-## Obiettivo
-Capire quando e perché usare Reactive Programming in Java/Spring, con particolare attenzione a Project Reactor e Spring WebFlux.
+## Seguire flussi asincroni di dati
 
-## Reactive Programming
-È un paradigma orientato a flussi asincroni di dati e alla propagazione degli eventi.
+La programmazione reattiva descrive flussi di dati ed eventi che possono arrivare nel tempo. **Asincrono** significa che il risultato non deve essere disponibile subito al chiamante; **non bloccante** significa che il thread non resta occupato nell'attesa dell'I/O. Una chiamata JDBC eseguita su un executor è asincrona per il chiamante, ma continua a bloccare il thread che la esegue.
 
-Concetti:
-- asynchronous processing
-- non-blocking I/O
-- backpressure
-- stream
-- event-driven processing
+Il vantaggio può essere gestire molte attese con un numero contenuto di thread. Una singola query non diventa necessariamente più veloce e il lavoro CPU richiede comunque capacità di calcolo. Il modello va scelto in base al carico e alle dipendenze.
 
-## Project Reactor
-Tipi principali:
-- `Mono<T>`: zero o un elemento
-- `Flux<T>`: zero o N elementi
+## Mono, Flux e operatori in Reactor
 
-Operatori comuni:
-- `map`
-- `flatMap`
-- `filter`
-- `zip`
-- `concat`
-- `merge`
-- `switchIfEmpty`
-- `onErrorResume`
-- `retryWhen`
+Project Reactor offre `Mono<T>` per un flusso di zero o un elemento e `Flux<T>` per zero o più elementi. Il completamento senza valori è diverso dal fallimento. Nelle comuni pipeline lazy, descrivere gli operatori non basta a eseguire il lavoro: occorre una sottoscrizione, spesso gestita dal framework web.
 
-## Spring WebFlux
-WebFlux è il framework reactive di Spring basato su Reactive Streams/Reactor.
+`map` trasforma il valore; `flatMap` compone un'altra elaborazione reattiva. Su un Flux, `flatMap` può intercalare risultati e non conserva necessariamente l'ordine originario. `concat` elabora sequenze una dopo l'altra, mentre `merge` consente di intercalarle. `zip` combina valori delle sorgenti e richiede che queste producano i valori necessari. `filter` seleziona gli elementi; `switchIfEmpty` offre un percorso alternativo al completamento senza valori.
 
-È particolarmente utile quando il servizio gestisce molte operazioni I/O concorrenti e le dipendenze sono anch'esse non-blocking.
-
-## Blocking vs Non-blocking
-Architettura tradizionale:
-```text
-Request
-  ↓
-Thread
-  ↓
-Blocking DB call
-  ↓
-Response
+```java
+Mono<PaymentView> view = paymentClient.findById(paymentId)
+    .switchIfEmpty(Mono.error(new PaymentNotFoundException(paymentId)))
+    .map(PaymentView::from);
 ```
 
-Approccio reactive:
-```text
-Request
-  ↓
-Non-blocking pipeline
-  ↓
-Async DB / HTTP
-  ↓
-Response
-```
+L'esempio è una pipeline illustrativa: tipi e client appartengono all'applicazione. L'alternativa segnala un pagamento assente; non nasconde gli errori di comunicazione del client.
 
-Il vantaggio principale non è che una singola operazione diventa necessariamente più veloce, ma che le risorse possono essere utilizzate più efficientemente sotto elevata concorrenza I/O.
+## Backpressure: rendere esplicita la capacità
 
-## Backpressure
-Backpressure permette al consumer di segnalare al producer quanto lavoro è in grado di sostenere, evitando che una sorgente produca dati a una velocità ingestibile.
+La **backpressure** permette al subscriber di indicare quanti elementi è pronto a ricevere nel protocollo Reactive Streams. Non garantisce che qualsiasi sorgente esterna rallenti: un produttore non controllabile richiede una politica di sovraccarico.
 
-Strategie:
-- buffering
-- dropping
-- latest
-- rate limiting
-- batching
+Il **buffering** accoda dati, ma deve avere un limite. Il **dropping** scarta elementi; la strategia **latest** conserva soltanto il valore più recente, utile per alcuni aggiornamenti di stato. Il rate limiting limita il ritmo e il batching raggruppa elementi per ridurre costi per messaggio. Per una transazione finanziaria non si può adottare uno scarto silenzioso come se fosse un aggiornamento grafico: la politica deve rispettare il dominio.
 
-## Error Handling
-In Reactor gli errori fanno parte del flusso.
+## Errori e tentativi come parte del flusso
 
-Operatori importanti:
-- `onErrorReturn`
-- `onErrorResume`
-- `onErrorMap`
-- `retryWhen`
+Un segnale di errore termina normalmente la sequenza interessata. `onErrorReturn` sostituisce il fallimento con un valore; `onErrorResume` sceglie un'altra sequenza; `onErrorMap` traduce il tipo di errore. Un fallback deve rendere esplicita l'eventuale perdita di informazioni, invece di restituire un risultato che sembri valido.
 
-Attenzione: retry indiscriminati possono amplificare un problema di una dipendenza già degradata.
+`retryWhen` può sottoscrivere di nuovo la sorgente dopo un errore. Il nuovo tentativo può ripetere gli effetti dell'operazione: servono idempotenza, limiti e backoff con jitter. Il retry è adatto ad alcuni guasti temporanei, non a rendere valido un input errato.
 
-## Reactive e Database
-Un'applicazione WebFlux non diventa realmente non-blocking se usa driver JDBC bloccanti indiscriminatamente.
+## WebFlux e dipendenze bloccanti
 
-Per un percorso completamente reactive valutare:
-- R2DBC per database relazionali
-- Reactive MongoDB driver
-- client HTTP non-blocking
-- reactive messaging
+Spring WebFlux supporta questo modello nel livello HTTP. L'**event loop** gestisce eventi e avanzamento delle operazioni: bloccarlo con una chiamata lenta impedisce di far progredire altre richieste. Un percorso non bloccante richiede client coerenti, come client HTTP reattivi, driver MongoDB reattivi o R2DBC per database relazionali.
 
-## Reactive vs CompletableFuture
-`CompletableFuture` è principalmente orientato alla composizione di operazioni asincrone singole.
+Se si deve integrare codice bloccante, lo si isola su uno scheduler appropriato, come `boundedElastic`, con capacità e attese controllate. Questo conserva un confine utile, ma non elimina il costo del blocco. Per molti servizi con JDBC e flussi semplici, Spring MVC e virtual thread possono essere un'alternativa da misurare.
 
-Reactor aggiunge un modello più completo per stream, backpressure, composizione e gestione di flussi di eventi.
+## Confrontare modelli sullo stesso problema
 
-## Quando NON usare Reactive
-Non scegliere WebFlux solo perché è "più moderno".
+`CompletableFuture` compone principalmente risultati asincroni singoli. Reactor aggiunge un modello per flussi, domanda e operatori di composizione; in cambio richiede familiarità con sottoscrizioni, scheduler e propagazione degli errori. Il beneficio va confrontato con la complessità che il team dovrà mantenere.
 
-Valutare con attenzione se:
-- la maggior parte delle dipendenze è blocking
-- il carico è limitato
-- il team non conosce il paradigma
-- la complessità non porta benefici
-- il problema è CPU-bound
-
-## Domande da colloquio
-1. Mono vs Flux?
-2. Cos'è backpressure?
-3. WebFlux è sempre più veloce di Spring MVC?
-4. Perché JDBC può essere un problema in una pipeline reactive?
-5. `map` vs `flatMap` in Reactor?
-6. Come gestisci gli errori in Reactor?
-7. Come implementi retry con backoff?
-8. Reactive vs CompletableFuture?
-9. Quando non useresti WebFlux?
-10. Come progetteresti un servizio reactive che chiama tre API esterne?
+Progetta un endpoint che chiama tre API esterne. Spiega quali risultati sono indispensabili, quali timeout hanno e se un fallimento consente una risposta parziale. Confronta una composizione reattiva e una soluzione con virtual thread usando lo stesso carico e gli stessi limiti: valuta latenza, memoria, errori e chiarezza del codice.

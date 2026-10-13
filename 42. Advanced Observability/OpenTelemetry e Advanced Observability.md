@@ -1,107 +1,39 @@
-# 42. Advanced Observability e OpenTelemetry
+# 42. Osservabilità e OpenTelemetry
 
-## Obiettivo
-Passare dalla semplice raccolta di log e metriche a una strategia completa di osservabilità per sistemi distribuiti.
+## Rendere interrogabile il comportamento del sistema
 
-## I tre pilastri
-- Logs
-- Metrics
-- Traces
+L'**osservabilità** è la capacità di comprendere il comportamento interno attraverso i segnali prodotti dal sistema. I log registrano eventi, le metriche aggregano misure e le trace descrivono percorsi di operazioni. Raccogliere tutto senza una domanda concreta può aumentare il costo senza ridurre il tempo necessario a diagnosticare un guasto.
 
-L'obiettivo non è semplicemente raccogliere dati, ma poter rispondere rapidamente a domande come: **cosa è successo, dove, quando e perché?**
+Per un pagamento vuoi sapere se il servizio è disponibile, dove si trova un ritardo e quali passaggi hanno portato a un esito sconosciuto. Servono segnali coerenti e identificatori che consentano di collegarli.
 
-## Distributed Tracing
-Una singola richiesta può attraversare API Gateway, microservizi, database e broker.
+## Trace, span e propagazione del contesto
 
-Concetti:
-- Trace
-- Span
-- Parent/child span
-- Trace ID
-- Span ID
-- Context propagation
-- Sampling
+Una **trace** raccoglie operazioni correlate. Uno **span** descrive una singola operazione con tempi, attributi ed esito; relazioni parent-child mostrano quali operazioni ne abbiano avviate altre. Il **Trace ID** identifica la traccia e lo **Span ID** la singola operazione.
 
-Il Trace ID permette di correlare le diverse operazioni appartenenti alla stessa richiesta distribuita.
+La **context propagation** trasmette questi riferimenti tra processi, per esempio mediante header HTTP o metadati di messaggi. In un flusso asincrono si può usare una relazione di parentela o un collegamento tra span secondo il modello scelto. Il solo transaction ID di business non sostituisce la struttura della trace, ma può permettere di cercarla.
 
-## OpenTelemetry
-OpenTelemetry è uno standard/framework open source per generare, raccogliere e esportare telemetry.
+Il **sampling** seleziona le trace da conservare. Riduce il costo, ma può eliminare proprio una richiesta interessante. Si definiscono politiche coerenti con errori, latenza e limiti di dati; non si presume che una trace mancante dimostri che l'operazione non sia avvenuta.
 
-Componenti/concepts:
-- Instrumentation
-- SDK
-- Collector
-- Exporter
-- OTLP
-- Traces
-- Metrics
-- Logs
+## Il percorso della telemetria
 
-L'OpenTelemetry Collector può ricevere telemetry dalle applicazioni, elaborarla e inoltrarla verso backend differenti senza legare il codice applicativo a un singolo vendor.
+L'**instrumentation** aggiunge i punti di misura, automaticamente tramite librerie o manualmente nel codice. Un **SDK** gestisce produzione e trattamento dei segnali; un **exporter** li invia al destinatario. L'OpenTelemetry **Collector** riceve, elabora e inoltra telemetria. **OTLP**, OpenTelemetry Protocol, è un protocollo per questo scambio.
 
-## Metrics
-Metriche utili:
-- request rate
-- error rate
-- latency p50/p95/p99
-- CPU
-- memory
-- GC
-- database connections
-- queue depth
-- Kafka consumer lag
+Il Collector consente di centralizzare filtri, batching e instradamento verso backend diversi. Non è di per sé il database di consultazione: occorre un backend che conservi e renda interrogabili i segnali. La telemetria deve avere limiti e un comportamento previsto anche quando il backend non è raggiungibile.
 
-### RED Method
-Per i servizi:
-- Rate
-- Errors
-- Duration
+## Metriche per servizi e risorse
 
-### USE Method
-Per le risorse:
-- Utilization
-- Saturation
-- Errors
+Il metodo **RED** osserva Rate, Errors e Duration: ritmo delle richieste, errori e tempi. Il metodo **USE** osserva Utilization, Saturation ed Errors delle risorse: uso, lavoro in attesa e guasti. Una CPU al 30% può convivere con richieste in coda per un pool di connessioni esaurito.
 
-## Logging
-Best practice:
-- structured logging
-- correlation ID
-- trace ID
-- log levels appropriati
-- evitare dati sensibili
-- centralizzazione
+Per un servizio Java si correlano percentili di latenza, memoria, GC e connessioni. Per la messaggistica si osservano profondità delle code e consumer lag. p95 e p99 aiutano a vedere la coda dei tempi, che la media può nascondere.
 
-## Alerting
-Un alert dovrebbe rappresentare un problema che richiede un'azione.
+La **cardinalità** delle metriche è il numero di combinazioni delle etichette. Usare un identificatore di pagamento come label genera serie quasi illimitate. Gli identificatori individuali appartengono generalmente a log e trace, con regole di accesso e conservazione adeguate.
 
-Evitare alert basati esclusivamente su metriche tecniche prive di impatto sul servizio. Preferire alert collegati a SLO, error rate, latency e saturation.
+## Log e alert orientati all'azione
 
-## Observability in Microservices
-Una catena tipica:
+Lo **structured logging** rappresenta gli eventi con campi stabili, come servizio, esito e identificatore di correlazione. Livelli e centralizzazione aiutano la ricerca, ma password, token e dati sensibili non devono diventare materiale diagnostico diffuso.
 
-`Client → API Gateway → Service A → Kafka → Service B → Database`
+Un alert deve indicare un problema e un'azione. Collegarlo al consumo dello SLO può distinguere una variazione innocua da un degrado del servizio. Il **burn rate** esprime la velocità con cui viene consumato il budget d'errore rispetto a quella ammessa; finestre brevi e lunghe aiutano a riconoscere sia incidenti rapidi sia degradazioni persistenti.
 
-La propagazione del context permette di seguire la transazione attraverso l'intera catena.
+## Leggere un rallentamento lungo la catena
 
-## Esempio di troubleshooting
-Se la latency p99 di `PaymentService` aumenta:
-1. verificare se aumenta anche l'error rate
-2. controllare trace distribuiti
-3. identificare lo span più lento
-4. verificare DB, connection pool o chiamate esterne
-5. correlare con deployment recenti
-6. applicare mitigazione
-7. verificare il ritorno ai valori SLO
-
-## Domande da colloquio
-1. Logs vs metrics vs traces?
-2. Cos'è uno span?
-3. Come propaghi un Trace ID tra microservizi?
-4. Cos'è OpenTelemetry?
-5. Perché usare un Collector?
-6. Perché p95/p99 sono spesso più utili della media?
-7. RED vs USE?
-8. Come monitori il consumer lag Kafka?
-9. Come costruisci un alert efficace?
-10. Come indaghi una latency anomala in un sistema distribuito?
+Nel flusso `Client → Gateway → Service A → Kafka → Service B → Database`, l'aumento del p99 può nascere in punti diversi. Parti dal traffico e dagli errori, cerca trace rappresentative e individua attese e span lenti. Un consumer lag in aumento suggerisce un ritardo asincrono; connessioni occupate e query lente indicano un altro percorso. Confronta poi i segnali con cambiamenti recenti e verifica che la mitigazione ripristini anche l'esito per l'utente.

@@ -1,32 +1,31 @@
-# 27. Troubleshooting e Gestione Incident in Produzione
+# 27. Diagnosi e gestione degli incidenti in produzione
 
-### Cos'è e perché conta
-È un requisito esplicito della job description ("analisi tecnica, troubleshooting e gestione di incident in ambienti di produzione") ma finora mai trattato nel documento. A un senior spesso si chiede non solo "conosci la tecnologia X" ma "come ragioni quando qualcosa si rompe in produzione alle 3 di notte" — è una domanda quasi certa in un colloquio per questo ruolo.
+## Capire l'impatto prima di cercare una spiegazione
 
-### Metodologia generale (framework da avere pronto)
+Un **incidente** è una degradazione che richiede una risposta operativa. La prima domanda è quali utenti e operazioni siano coinvolti, da quando e con quale gravità. Un errore su un solo provider suggerisce un ambito diverso da un'interruzione di tutte le autorizzazioni, ma non dimostra ancora la causa.
 
-1. **Individuare e circoscrivere l'impatto**: cosa non funziona, per chi, da quando — prima capire la portata (un cliente? tutti i pagamenti con un circuito specifico? tutti?) che approfondire la causa
-2. **Stabilizzare prima di capire**: se esiste un modo rapido per limitare il danno (rollback, feature flag, circuit breaker manuale, failover) si applica **prima** di investigare a fondo la causa — specialmente in un dominio dove ogni minuto di downtime ha un costo diretto
-3. **Raccogliere evidenze**: log applicativi, metriche (latenza, error rate — golden signals visti nel punto 11), tracing distribuito se il problema attraversa più servizi
-4. **Formulare e verificare ipotesi**: partire dal cambiamento più recente (un deploy? una configurazione? un picco di traffico?) — la causa più probabile di un incident è spesso "cosa è cambiato di recente", non un bug dormiente da mesi
-5. **Root cause analysis**: una volta risolto l'impatto immediato, capire la causa profonda — non fermarsi al sintomo (es. "un servizio è andato in OOM" non è la causa, ma il sintomo di un memory leak o di un carico non previsto)
-6. **Post-mortem senza colpevolizzazione (blameless)**: documentare cosa è successo, perché, e quali azioni preventive si adottano — pratica standard in ambienti enterprise maturi
+La **mitigazione** riduce il danno prima che l'indagine sia completa. Può essere un rollback, la disattivazione di una funzione o l'isolamento di una dipendenza. Un **feature flag** controlla l'attivazione di un comportamento; un **failover** sposta il servizio verso risorse alternative. Queste azioni devono avere condizioni note e un modo per verificarne l'esito.
 
-### Strumenti concreti da citare
+## Costruire e verificare ipotesi
 
-- **Log centralizzati** (ELK, già visto nel punto 11): cercare errori/eccezioni nel periodo dell'incident, correlando per un ID di correlazione/transaction ID che attraversa i vari servizi
-- **Tracing distribuito** (Jaeger/Zipkin): capire in quale servizio della catena si è verificato il rallentamento/errore, quando il problema attraversa più microservizi
-- **Metriche e dashboard** (Prometheus/Grafana): capire se il problema è graduale (memory leak, saturazione risorse) o improvviso (deploy, picco di traffico)
-- **Execution plan** (già visto nel punto 3): se il sintomo è una query lenta, è il primo strumento da controllare
+Log centralizzati consentono di cercare errori nella stessa finestra temporale; metriche mostrano traffico, tempi, errori e saturazione; trace collegano una richiesta attraverso servizi diversi. Un identificatore di correlazione aiuta a ricostruire il percorso senza copiare credenziali o dati sensibili nelle evidenze.
 
-### Esempio di scenario ragionato (utile da avere pronto)
+Si confrontano cambiamenti recenti, carico e comportamento delle dipendenze. Un deploy appena avvenuto è un'ipotesi utile, non una causa dimostrata. Anche risorse apparentemente normali non escludono un guasto infrastrutturale: una rete degradata può far aumentare la latenza senza saturare CPU e memoria.
 
-*"Se ricevo un alert che il tasso di errore sulle autorizzazioni carta è salito improvvisamente, per prima cosa controllo se è isolato a un circuito specifico o generale — se è isolato, probabilmente il problema è a valle (es. il circuito esterno è lento o giù) e valuto se attivare un circuit breaker/fallback; se è generale, controllo se c'è stato un deploy recente e valuto un rollback immediato prima di investigare a fondo la causa, perché ripristinare il servizio ha priorità sul capire esattamente cosa è successo."*
+Il **thread dump** mostra stack e attese; l'**heap dump** aiuta a esaminare oggetti e riferimenti. Un **execution plan** descrive come il database esegue una query. La scelta dello strumento segue l'ipotesi: raccogliere tutto indiscriminatamente può costare tempo e risorse durante l'incidente.
 
-### Domande tipiche e risposte
+## Un'autorizzazione che va in timeout
 
-- *D: Qual è il tuo primo passo quando ricevi un alert di produzione?*
-  R: Capire l'impatto reale (quanti utenti/transazioni coinvolti, da quando) prima di iniziare a investigare la causa — questo determina l'urgenza e se serve una mitigazione immediata (rollback, failover) prima ancora di capire il "perché".
+Se aumentano i timeout, separa provider, istanze e tipi di richiesta. Controlla dove si accumula l'attesa e se i retry aumentano il traffico. Un circuit breaker può contenere nuove chiamate fallimentari; una limitazione del carico può proteggere le risorse residue.
 
-- *D: Come distingui un problema applicativo da un problema infrastrutturale?*
-  R: Guardo le metriche di sistema (CPU, memoria, rete, connessioni DB) insieme ai log applicativi — se le risorse sono normali ma ci sono eccezioni applicative, è probabile un bug o un problema di dati; se le risorse sono sature, è più probabile un problema di capacità/infrastruttura o un memory leak.
+Il timeout non prova il rifiuto del pagamento. Alcune operazioni possono essere già riuscite e richiedere interrogazione dello stato o riconciliazione. Un rollback del codice può ripristinare il servizio, ma non annulla automaticamente effetti finanziari già prodotti. La gestione dell'incidente deve includere questi esiti, non soltanto il ritorno del grafico al verde.
+
+## Chiudere l'incidente con evidenze e azioni
+
+Dopo la mitigazione si verifica il servizio dal punto di vista dell'utente e si controlla il lavoro accumulato. La **Root Cause Analysis** ricostruisce cause e condizioni; un **blameless postmortem** registra sequenza, decisioni e azioni senza ridurre il problema all'errore di una persona.
+
+«Out of memory» è un evento osservato, non una spiegazione completa: può derivare da perdita di riferimenti, crescita inattesa o limiti errati. Le azioni successive devono distinguere queste cause e avere una verifica, per esempio un test prolungato o un limite sul buffer. Il capitolo 39 collega questo percorso agli obiettivi di affidabilità.
+
+## Esercizio
+
+Descrivi un aumento degli errori dopo un rilascio. Indica quale misura confermerebbe o smentirebbe l'ipotesi di regressione, quale mitigazione sarebbe reversibile e come accerteresti che i pagamenti con esito sconosciuto siano stati recuperati.

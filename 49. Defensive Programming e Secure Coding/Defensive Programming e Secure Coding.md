@@ -1,205 +1,53 @@
-# 49. Defensive Programming e Secure Coding
+# 49. Programmazione difensiva e codice sicuro
 
-## Obiettivo
-Sviluppare codice robusto che gestisca input inattesi, errori, dipendenze non affidabili e minacce di sicurezza secondo il principio **fail safe / secure by design**.
+## Esplicitare ciò che il codice può accettare
 
-## Defensive Programming
-Principi fondamentali:
-- Validate input
-- Fail fast
-- Fail secure
-- Least privilege
-- Explicit assumptions
-- Immutability dove appropriata
-- Null safety
-- Bounds checking
-- Resource limits
-- Error handling esplicito
-- Defense in depth
+La **programmazione difensiva** rende espliciti input ammessi, invarianti e comportamento in caso di errore. Il principio **secure by design** inserisce la protezione nelle scelte iniziali: permessi, confini, gestione dei dati e recupero. La **defense in depth**, difesa su più livelli, evita che un solo controllo mancato comprometta l'intero sistema.
 
-## Input Validation
-Non fidarsi mai dell'input proveniente da:
-- HTTP request
-- query parameters
-- headers
-- file
-- message broker
-- database esterno
-- sistemi partner
+Ogni confine può portare dati inattesi: una richiesta HTTP, un header, un file, un messaggio o una risposta di un partner. Validare significa controllare tipo, formato, lunghezza, encoding, intervallo e significato di business. Un importo numericamente valido può appartenere a una valuta non supportata o eccedere un limite operativo.
 
-Validare:
-- tipo
-- formato
-- range
-- lunghezza
-- encoding
-- semantica business
-
-Esempio:
 ```java
-if (amount == null || amount.signum() < 0) {
-    throw new IllegalArgumentException("Invalid amount");
+if (amount == null || amount.signum() <= 0) {
+    throw new IllegalArgumentException("L'importo deve essere positivo");
 }
 ```
 
-In Spring usare validation declarativa quando appropriato:
-- `@Valid`
-- `@Validated`
-- `@NotNull`
-- `@Size`
-- `@Pattern`
-- `@Positive`
+L'esempio ammette soltanto importi positivi; un dominio che consenta importi zero deve dichiarare un'altra regola. In Bean Validation, `@NotNull`, `@Size`, `@Pattern` e `@Positive` esprimono vincoli, mentre `@Valid` attiva la validazione anche sugli oggetti collegati e `@Validated` supporta la validazione Spring nei contesti configurati. I vincoli semplici non sostituiscono le regole che coinvolgono più dati.
 
-## Fail Fast vs Fail Open
-In caso di input o configurazione non valida, preferire un comportamento che impedisca l'esecuzione non sicura.
+## Fallire presto e fallire in sicurezza
 
-Esempio di errore grave:
-```text
-Authorization service unavailable
-        ↓
-Allow request  ❌
-```
+**Fail fast** significa riconoscere subito una condizione non valida, evitando che l'errore emerga lontano dalla causa. **Fail secure** significa mantenere le proprietà di sicurezza durante un guasto. **Fail open** permette invece l'accesso quando il controllo non è disponibile: per un'autorizzazione sensibile potrebbe essere una violazione, non un miglioramento della disponibilità.
 
-Preferibile, quando il dominio lo consente:
-```text
-Authorization service unavailable
-        ↓
-Deny request   ✅
-```
+Se il servizio dei permessi non risponde, il percorso previsto deve impedire accessi indebiti oppure usare una politica locale esplicitamente valida. La scelta non può dipendere da un `catch` che restituisce automaticamente successo.
 
-## Exception Handling
-Non usare eccezioni generiche senza motivo.
+## Errori, null e risorse
 
-Best practice:
-- eccezioni specifiche
-- error response standardizzato
-- non esporre stack trace
-- logging con correlation ID
-- separare errori tecnici da errori di business
-- evitare catch che nascondono il problema
+Le eccezioni specifiche aiutano a distinguere un pagamento rifiutato da una dipendenza indisponibile. Il client riceve un errore stabile e comprensibile; log protetti e identificatore di correlazione conservano il dettaglio diagnostico. Nascondere l'eccezione o restituire stack trace e SQL al client produce altri problemi.
 
-## Null Safety
-Ridurre i NullPointerException attraverso:
-- invariants
-- constructor validation
-- `Optional` nei return type appropriati
-- oggetti immutabili
-- `Objects.requireNonNull`
+Le **invarianti** rendono validi gli oggetti fin dalla costruzione. `Objects.requireNonNull` verifica dipendenze obbligatorie; `Optional` può esprimere assenza nei risultati. L'immutabilità riduce modifiche inattese, ma una collezione immutabile superficialmente può ancora contenere oggetti mutabili. Il **bounds checking** verifica limiti di indici e dimensioni prima dell'accesso.
 
-## Resource Management
-Gestire sempre correttamente:
-- DB connections
-- HTTP connections
-- file handles
-- streams
-- thread pools
-- memory buffers
+Un **resource leak** lascia risorse occupate dopo l'uso, come connessioni o file. `try-with-resources` chiude risorse `AutoCloseable` anche in presenza di eccezioni; pool e client condivisi richiedono invece un ciclo di vita esplicito. Limiti per payload, buffer, concorrenza e tempo impediscono che un input consumi risorse senza controllo.
 
-Usare `try-with-resources` quando appropriato.
+## Contenere le dipendenze
 
-## Timeouts
-Ogni chiamata a una dipendenza esterna dovrebbe avere timeout appropriati:
-- connection timeout
-- read/response timeout
-- overall request timeout
+Il connection timeout limita l'apertura della connessione; il read o response timeout limita attese della risposta secondo il client utilizzato; una scadenza complessiva limita l'intera operazione. I significati precisi vanno verificati nella libreria, perché un timeout per lettura non è necessariamente un limite totale.
 
-Una chiamata senza timeout può trasformare un problema di una dipendenza in un esaurimento di thread/connection pool.
+Il **retry con backoff** distanzia tentativi su errori temporanei. Un **circuit breaker** sospende chiamate verso una dipendenza che fallisce ripetutamente. Un **bulkhead** separa capacità e pool affinché una dipendenza non consumi tutte le risorse; il **rate limiting** limita il ritmo delle richieste. L'**idempotenza** permette di ripetere un'operazione senza ripeterne l'effetto. Un pagamento andato in timeout può essere già riuscito: un retry sicuro richiede la stessa identità dell'operazione e una verifica dell'esito.
 
-## Resilience
-Combinare defensive programming con:
-- timeout
-- retry con backoff
-- circuit breaker
-- bulkhead
-- rate limiting
-- idempotency
+## Proteggere le interpretazioni dell'input
 
-Non applicare retry indiscriminatamente: un retry su una operazione non idempotente può produrre duplicati.
+La SQL injection si previene con parametri, senza concatenare input alla query. Per XSS serve encoding appropriato al contesto di output; per CSRF si valuta come il browser invia le credenziali. La SSRF richiede controlli su destinazioni e accesso di rete, mentre il **path traversal** sfrutta percorsi come `../` per uscire dalle directory consentite.
 
-## Security
-Secure coding deve includere:
-- SQL injection prevention
-- output encoding
-- XSS prevention
-- CSRF protection quando applicabile
-- SSRF protection
-- path traversal prevention
-- XXE protection
-- secure deserialization
-- secret management
-- TLS
-- authorization checks
+Con XML, **XXE** indica l'uso di entità esterne che può accedere a risorse locali o remote; l'espansione di entità può consumare memoria e CPU. La configurazione del parser deve limitare queste capacità quando non necessarie. La deserializzazione di dati non fidati deve limitare tipi, dimensioni e comportamento; non si accetta qualsiasi oggetto indicato dal chiamante.
 
-Usare prepared statements/JPA parameters invece di concatenare SQL proveniente dall'input.
+TLS protegge il trasporto, ma il server verifica ancora identità, autorizzazione e appartenenza della risorsa. Un campo `role=ADMIN` nel payload non attribuisce permessi al mittente.
 
-## Authorization
-Non affidarsi esclusivamente al client per applicare le regole di sicurezza.
+## Segreti e dipendenze nel ciclo di sviluppo
 
-```text
-Client says: "I am ADMIN"
-        ↓
-Server verifies identity
-        ↓
-Server verifies authorization
-        ↓
-Allow / Deny
-```
+Password, chiavi e token richiedono distribuzione protetta, accessi minimi e rotazione; non vanno inseriti in codice, log o immagini. Un secret manager centralizza queste operazioni, ma occorre proteggere anche l'identità che lo interroga.
 
-## Secrets
-Non inserire password, API key o token:
-- nel codice
-- nei repository
-- nei log
-- nelle immagini Docker
-- nelle configurazioni versionate
+La **SCA**, Software Composition Analysis, analizza le dipendenze e le vulnerabilità note. Una **SBOM**, Software Bill of Materials, elenca i componenti del software. Le dipendenze **transitive** arrivano attraverso altre librerie e devono essere considerate insieme a quelle dichiarate direttamente. Una scansione senza segnalazioni non dimostra l'assenza di vulnerabilità: contano aggiornamenti, configurazione e uso effettivo.
 
-Usare secret manager e meccanismi di rotazione.
+## Una revisione orientata ai guasti
 
-## Dependency Security
-Controllare:
-- vulnerabilità delle dipendenze
-- versioni obsolete
-- transitive dependencies
-- SBOM
-- SCA
-
-Integrare security scanning nella CI/CD.
-
-## Defensive Programming nei microservizi
-Ogni servizio deve assumere che:
-- la rete possa fallire
-- il database possa essere lento
-- il broker possa essere indisponibile
-- i messaggi possano essere duplicati
-- le API esterne possano restituire dati inattesi
-- i timeout possano verificarsi
-
-Questo porta a progettare per **partial failure** invece di assumere che tutte le dipendenze siano sempre disponibili.
-
-## Code Review Checklist
-Prima di approvare codice chiedersi:
-1. L'input è validato?
-2. Le autorizzazioni sono verificate lato server?
-3. Esistono timeout?
-4. Retry e operazioni sono compatibili con l'idempotenza?
-5. Gli errori sono gestiti correttamente?
-6. Vengono esposti dati sensibili?
-7. Esistono resource leak?
-8. Sono presenti race condition?
-9. Le dipendenze sono sicure?
-10. Esistono test per i failure scenario?
-
-## Domande da colloquio
-1. Cos'è Defensive Programming?
-2. Fail fast vs fail secure?
-3. Come gestisci input non affidabili?
-4. Come proteggi una API da SSRF?
-5. Come gestisci timeout e retry?
-6. Perché un retry può essere pericoloso?
-7. Come eviti SQL injection?
-8. Come gestisci i secret?
-9. Cosa significa secure by design?
-10. Come progetteresti un microservizio che continua a comportarsi correttamente quando una dipendenza è indisponibile?
-
-## Regola Senior
-Un codice di qualità non considera solo il **happy path**. Progetta esplicitamente per errori, input malevoli, dipendenze indisponibili, dati inconsistenti, timeout, concorrenza e failure parziali.
+Prima del rilascio verifica che input e permessi siano controllati lato server, che le risorse abbiano limiti e che timeout e retry rispettino il dominio. Cerca **race condition**, errori dovuti all'interleaving di operazioni concorrenti, ed esiti sconosciuti dopo guasti parziali. Per un consumer di pagamenti, un test che consegni due volte lo stesso evento e uno che interrompa il processo tra effetto e conferma sono più significativi di una verifica del solo percorso riuscito.

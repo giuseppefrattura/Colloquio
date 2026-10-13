@@ -1,113 +1,41 @@
-# 44. OAuth2, OpenID Connect e JWT — Advanced
+# 44. OAuth 2.0, OpenID Connect e JWT
 
-## Obiettivo
-Approfondire authentication e authorization a livello Senior, distinguendo chiaramente OAuth2, OpenID Connect e JWT e collegandoli alle API e ai microservizi.
+## Tre concetti con ruoli diversi
 
-## OAuth 2.0
-OAuth2 è un framework per delegare l'accesso a risorse protette.
+OAuth 2.0 delega l'accesso a risorse. OpenID Connect, o OIDC, aggiunge un livello di autenticazione e identità. JWT definisce un formato di token: non è un flusso di login e non è obbligatorio per ogni access token OAuth.
 
-Concetti:
-- Resource Owner
-- Client
-- Authorization Server
-- Resource Server
-- Access Token
-- Refresh Token
-- Scope
+Il **resource owner** è il soggetto titolare dell'accesso; il **client** richiede la delega; l'**authorization server** emette i token; il **resource server** protegge le API. Uno **scope** rappresenta un ambito di accesso delegato. Un utente può autorizzare un'applicazione a leggere dati senza concederle la propria password.
 
-### Authorization Code + PKCE
-Flusso tipico per applicazioni user-facing:
-1. client avvia l'autorizzazione
-2. utente autentica e concede il consenso
-3. authorization server restituisce un authorization code
-4. client scambia il code per token
-5. access token viene utilizzato verso il resource server
+## Seguire Authorization Code con PKCE
 
-PKCE protegge il code exchange soprattutto nei client pubblici.
+Il client avvia l'autorizzazione tramite il browser. L'authorization server autentica l'utente e, secondo la politica applicabile, acquisisce il consenso. Restituisce un codice temporaneo a un redirect URI registrato. Il client scambia il codice al token endpoint e usa l'access token per l'API.
 
-### Client Credentials
-Utilizzato per machine-to-machine communication quando non esiste un utente coinvolto.
+Con **PKCE**, Proof Key for Code Exchange, il client genera un verificatore e invia inizialmente una challenge derivata. Lo scambio del codice richiede il verificatore, rendendo insufficiente il possesso del solo codice intercettato. Il flusso deve proteggere anche redirect e collegamento con la richiesta iniziale. Le indicazioni di sicurezza e l'uso di PKCE sono descritti nella [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html).
 
-Esempio: `Payment Service → Fraud Service`.
+**Client Credentials** è il flusso per un'applicazione che agisce con i propri privilegi, senza rappresentare la sessione di un utente. Un servizio pagamenti può usarlo per invocare un servizio antifrode con scope limitati. Non è una scorciatoia per impersonare ogni utente.
 
-## OpenID Connect
-OIDC estende OAuth2 aggiungendo un livello standard di **autenticazione e identità**.
+## Identità OIDC e token per le API
 
-Concetti:
-- Identity Provider
-- ID Token
-- UserInfo endpoint
-- Claims
-- Discovery
-- JWKS
+OIDC introduce l'**ID token**, destinato al client per descrivere l'autenticazione dell'utente. Non va confuso con l'access token destinato al resource server. Le **claims** sono dichiarazioni sul soggetto o sul token. L'endpoint **UserInfo** può fornire informazioni autorizzate; la **discovery** pubblica metadati e indirizzi del provider.
 
-### OAuth2 vs OIDC
-- OAuth2: autorizzazione/accesso a risorse
-- OIDC: autenticazione/identità sopra OAuth2
+L'**access token** accompagna le chiamate alle API e ha una durata e un destinatario definiti. Il **refresh token** permette di richiedere nuovi access token ed è trattato come una credenziale sensibile. Emissione, conservazione, rotazione e revoca dipendono dal tipo di client e dalla politica di sicurezza; non si invia il refresh token a ogni servizio.
 
-## JWT
-Un JWT normalmente contiene:
-- Header
-- Payload
-- Signature
+## Leggere e validare un JWT
 
-La firma garantisce integrità e autenticità del token, non riservatezza.
+Un JWT firmato in rappresentazione compatta comprende header, payload e firma. L'header descrive parametri della protezione, il payload contiene claims e la firma protegge integrità e autenticità entro il modello di fiducia. La codifica non nasconde il contenuto. Un token cifrato usa un'altra struttura e non va descritto come il medesimo formato a tre parti.
 
-### Claims
-Esempi:
-- `iss`
-- `sub`
-- `aud`
-- `exp`
-- `iat`
-- `scope`
-- `roles`
+`iss` identifica l'emittente, `sub` il soggetto, `aud` il destinatario e `exp` la scadenza. `iat` indica l'emissione; `nbf`, se presente, il momento prima del quale il token non è valido. Scope e ruoli hanno significato secondo il contratto del provider, non sono permessi automaticamente universali.
 
-### Validazione
-Il Resource Server dovrebbe verificare almeno:
-- firma
-- issuer
-- audience
-- expiration
-- eventuali scope/ruoli richiesti
+Il resource server verifica firma con algoritmi consentiti, emittente atteso, audience corretta e vincoli temporali. Poi applica l'autorizzazione alla risorsa. Decodificare il payload non significa validarlo; una firma valida di un emittente inatteso non rende il token accettabile.
 
-## Access Token vs Refresh Token
-L'access token viene utilizzato per accedere alle API e dovrebbe avere lifetime limitata.
+## Chiavi, rotazione e revoca
 
-Il refresh token permette di ottenere nuovi access token senza richiedere nuovamente il login, con policy di sicurezza e revoca appropriate.
+Un **JWKS**, JSON Web Key Set, pubblica chiavi che consentono la verifica; il parametro `kid` aiuta a selezionare la chiave prevista. L'endpoint viene configurato o ottenuto da metadati fidati, non scelto liberamente da un token non verificato. La cache delle chiavi riduce dipendenze per richiesta ma richiede gestione delle chiavi sconosciute e dei guasti.
 
-## JWKS e Key Rotation
-Il Resource Server può recuperare le chiavi pubbliche dall'endpoint JWKS dell'Identity Provider.
+Nella rotazione ordinaria una finestra di sovrapposizione può permettere ai token ancora validi di usare la vecchia chiave. Una chiave compromessa richiede invece una risposta coerente con la revoca. Validazione locale e scadenze lunghe rendono difficile invalidare immediatamente ogni token: questa conseguenza va progettata.
 
-La rotazione delle chiavi deve permettere un periodo di sovrapposizione in cui sia possibile validare token firmati con la chiave precedente mentre i nuovi token usano la nuova chiave.
+## Autorizzazione lungo l'architettura
 
-## Authorization
-- RBAC: permessi associati a ruoli
-- ABAC: decisione basata su attributi di utente, risorsa e contesto
-- Scopes: permessi delegati tipicamente associati all'access token
+RBAC associa permessi a ruoli; ABAC usa attributi e contesto; gli scope delimitano la delega. Il gateway può applicare controlli comuni, mentre il resource server protegge le regole e i dati che possiede. Il client ottiene il token dall'authorization server e poi lo presenta all'API: non ogni chiamata richiede un nuovo login presso il provider.
 
-## Security pitfalls
-- token troppo longevi
-- mancata validazione `aud`/`iss`
-- secret hardcoded
-- log di access token
-- uso improprio di OAuth2 come autenticazione
-- assenza di TLS
-- gestione insicura dei refresh token
-
-## API Security Architecture
-`Client → API Gateway → Resource Server → Authorization Server`
-
-Il Gateway può applicare rate limiting e policy comuni, mentre l'autorizzazione business-specific dovrebbe rimanere nel servizio che possiede il dominio.
-
-## Domande da colloquio
-1. OAuth2 vs OpenID Connect?
-2. JWT è cifrato o firmato?
-3. Authorization Code vs Client Credentials?
-4. Perché usare PKCE?
-5. Access token vs refresh token?
-6. Come valida un Resource Server un JWT?
-7. Cos'è JWKS?
-8. Come gestisci key rotation?
-9. RBAC vs ABAC?
-10. Dove implementeresti authorization in una architettura a microservizi?
+Per esercitarti, disegna separatamente il login e una chiamata all'API. Indica chi riceve codice, ID token, access token e refresh token, e spiega quale controllo impedisce a un token valido per un'altra API di essere accettato.

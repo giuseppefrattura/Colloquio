@@ -1,42 +1,31 @@
-# 30. Concetti Trasversali Importanti
+# 30. Concetti trasversali: collegare le proprietà del sistema
 
-### Cos'è e perché conta
-Sono temi che attraversano tutta l'architettura (sicurezza, osservabilità, CI/CD, resilienza) e che spesso emergono in domande "da senior" — non tanto "sai scrivere questo codice" quanto "sai ragionare sul sistema nel suo complesso".
+## Seguire una richiesta dall'ingresso all'esito
 
-### Cosa studiare
+Un pagamento attraversa sicurezza, transazioni, dipendenze e osservabilità. Studiare questi aspetti separatamente è utile, ma il comportamento reale nasce dalla loro interazione. Consideriamo una richiesta ricevuta due volte perché il client non ha visto la prima risposta.
 
-**Sicurezza**
+L'autenticazione identifica il chiamante e l'autorizzazione verifica che possa operare sul conto. OAuth delega l'accesso, OIDC fornisce un livello di identità e un JWT firmato può trasportare claims verificabili. La firma non nasconde i dati. TLS protegge il trasferimento **in transit**, mentre cifratura e gestione delle chiavi proteggono la conservazione **at rest**. Il minimo privilegio limita ciò che ciascuna identità può fare anche dopo una compromissione.
 
-- **Autenticazione vs autorizzazione**: l'autenticazione verifica *chi sei* (login), l'autorizzazione verifica *cosa puoi fare* (permessi) — distinzione base ma spesso confusa, utile da avere chiara e pronta
-- **OAuth 2.0**: protocollo standard per delegare l'accesso senza condividere le credenziali — flussi principali (Authorization Code, Client Credentials per comunicazione server-to-server, rilevante in integrazioni B2B tra sistemi di pagamento)
-- **JWT (JSON Web Token)**: token firmato che incapsula informazioni (claims) verificabili senza dover interrogare un DB centrale ad ogni richiesta — attenzione alla differenza tra firma (integrità, chiunque può leggere il contenuto) e cifratura (contenuto nascosto)
-- **Gestione dei secrets** (Vault, AWS Secrets Manager): mai credenziali/chiavi hardcoded nel codice o in config in chiaro — un secret manager centralizza, ruota e audita l'accesso a credenziali sensibili
-- **Principio del least privilege**: ogni componente/utente ha solo i permessi minimi indispensabili per il proprio compito — riduce l'impatto di una compromissione
-- **Encryption at rest e in transit**: dati cifrati sia quando salvati su disco (at rest) sia durante la trasmissione in rete (in transit, tipicamente TLS) — requisito quasi sempre esplicito in ambito PCI-DSS
+## Retry e idempotenza devono essere progettati insieme
 
-**Osservabilità**
+L'**idempotenza** produce lo stesso effetto osservabile quando la stessa operazione viene ripetuta. Un identificatore stabile permette di riconoscere il pagamento; un registro durevole collega tale identificatore a stato ed esito. Una transazione locale con `@Transactional` non deduplica automaticamente richieste HTTP né rende atomici effetti su un provider remoto.
 
-I tre pilastri:
-- **Logging** (ELK stack — Elasticsearch/Logstash/Kibana, Splunk): registrazione di eventi discreti, utile per debug e audit trail
-- **Metrics** (Prometheus, Grafana): valori numerici aggregati nel tempo (latenza media, throughput, error rate) — utili per dashboard e alerting
-- **Tracing distribuito** (Jaeger, Zipkin): traccia il percorso di una singola richiesta attraverso più microservizi, fondamentale per capire dove si perde tempo o dove fallisce una chiamata in una catena di servizi
+Un **timeout** limita l'attesa, non garantisce la cancellazione dell'operazione a valle. Un retry può quindi ripetere un effetto già avvenuto. Il **backoff esponenziale** aumenta l'attesa tra tentativi e il **jitter** li distribuisce nel tempo. Numero massimo e deadline complessiva impediscono che il recupero diventi carico senza limite.
 
-**Golden signals** da monitorare: latenza, error rate, throughput (spesso si aggiunge saturazione delle risorse come quarto segnale) — in un sistema di pagamenti questi si traducono direttamente in SLA verso i partner (es. tempo massimo di risposta per un'autorizzazione).
+La **graceful degradation** mantiene funzioni utili quando una parte fallisce. Per esempio, una dashboard può mostrare temporaneamente un dato meno recente. Per una verifica antifrode, la politica deve essere esplicita e compatibile con il rischio: il guasto non autorizza automaticamente il pagamento.
 
-**CI/CD**
+## Rendere visibile ciò che è accaduto
 
-- **Pipeline di deployment**: sequenza automatizzata di build, test, quality gate, deploy — collegabile a Jenkins già visto nella sezione toolchain
-- **Blue-green deployment**: due ambienti identici (blue e green), il traffico viene spostato istantaneamente dall'uno all'altro dopo il deploy della nuova versione — rollback immediato se qualcosa va storto, semplicemente reindirizzando il traffico indietro
-- **Canary release**: la nuova versione viene rilasciata prima a una piccola percentuale di traffico/utenti, per verificarne il comportamento in produzione prima di un rollout completo — riduce il rischio in sistemi critici
-- **Rollback automatici**: se le metriche post-deploy peggiorano oltre soglia, il sistema torna automaticamente alla versione precedente
-- **Infrastructure as Code** (Terraform, CloudFormation): l'infrastruttura è definita come codice versionabile, invece che configurata manualmente — garantisce riproducibilità e tracciabilità delle modifiche
+I log descrivono eventi, le metriche mostrano andamento e aggregati, le trace seguono il percorso distribuito. I **golden signals** sono traffico, latenza, errori e saturazione. Per i pagamenti vanno collegati anche agli esiti di dominio: una risposta HTTP riuscita può soltanto aver accettato un'elaborazione ancora incompleta.
 
-**Resilienza**
+Il correlation ID e gli identificatori di business permettono di collegare tentativi ed esito senza esporre PAN, password o token. L'osservabilità deve rispondere alla domanda «questo pagamento è stato applicato?» oltre a «il processo è vivo?».
 
-- **Timeout**: ogni chiamata a un servizio esterno deve avere un timeout esplicito, altrimenti un servizio lento può bloccare indefinitamente il chiamante
-- **Retry con exponential backoff**: se una chiamata fallisce, riprovare aumentando progressivamente l'attesa tra un tentativo e l'altro (es. 1s, 2s, 4s, 8s), per non sovraccaricare un servizio già in difficoltà
-- **Idempotenza delle operazioni**: già vista nella sezione su `@Transactional` — un'operazione ripetuta (es. per un retry) deve avere lo stesso effetto di eseguita una sola volta, cruciale per evitare doppi addebiti
-- **Graceful degradation**: se una funzionalità non essenziale fallisce, il sistema continua a funzionare offrendo un servizio ridotto invece di fallire completamente (es. se il servizio di scoring frodi è giù, si può decidere di procedere comunque con un pagamento a basso rischio invece di bloccare tutto)
+## Rilasciare e recuperare con gli stessi confini
 
-### Come esercitarti
-Collega esplicitamente **retry + idempotenza** al punto già visto su `@Transactional`: è uno dei fili conduttori più forti del colloquio, perché tocca dominio, Spring e architettura distribuita nello stesso concetto — un ottimo esempio da avere pronto e ben padroneggiato.
+Una pipeline CI/CD costruisce, verifica e promuove un artefatto. Un **blue-green deployment** mantiene due versioni di ambiente e sposta il traffico; un **canary** introduce gradualmente la nuova versione a una quota limitata. Entrambi richiedono compatibilità tra versioni e dati condivisi.
+
+Il rollback del traffico può essere rapido, ma uno schema distruttivo o un effetto esterno non tornano indietro soltanto cambiando immagine. L'**Infrastructure as Code** rende revisionabile la configurazione delle risorse; il recupero dei dati richiede backup, procedure e prove proprie.
+
+## Esercizio di sintesi
+
+Segui un pagamento ripetuto durante un canary. Spiega come versioni vecchie e nuove condividono l'identità dell'operazione, quali dati registrano e come l'operatore ricostruisce l'esito. La coerenza tra questi passaggi vale più della presenza isolata di ogni tecnologia.

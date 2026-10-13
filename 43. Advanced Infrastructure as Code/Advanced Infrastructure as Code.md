@@ -1,96 +1,37 @@
-# 43. Advanced Infrastructure as Code
+# 43. Infrastructure as Code: stato, collaborazione e recupero
 
-## Obiettivo
-Approfondire Infrastructure as Code oltre la semplice conoscenza di Terraform, collegandola a CI/CD, sicurezza, governance e gestione degli ambienti.
+## Descrivere risorse e relazioni
 
-## Terraform
-Concetti fondamentali:
-- HCL
-- Resources
-- Data sources
-- Variables
-- Outputs
-- Locals
-- Modules
-- Providers
-- State
-- Remote state
-- State locking
-- Dependencies
-- Drift
+L'**Infrastructure as Code**, IaC, rappresenta l'infrastruttura con configurazioni versionabili e verificabili. Terraform usa **HCL**, HashiCorp Configuration Language, per descrivere risorse e relazioni. Un **provider** integra le API di una piattaforma; una **resource** dichiara un oggetto da gestire, mentre una **data source** legge informazioni esistenti.
 
-## Modules
-I Terraform modules permettono di creare componenti riutilizzabili, ad esempio un modulo per un servizio ECS, una VPC o un database.
+Le **variable** ricevono input, i **local** esprimono valori derivati e gli **output** espongono risultati. Le dipendenze tra risorse guidano l'ordine delle operazioni. Il modello è dichiarativo: descrivi uno stato desiderato e Terraform calcola operazioni per avvicinarvi l'infrastruttura.
 
-Un buon modulo dovrebbe avere interfaccia chiara, pochi input necessari, output significativi e versionamento controllato.
+## Usare moduli con confini comprensibili
 
-## State Management
-Il Terraform state collega la configurazione dichiarativa alle risorse reali.
+Un **module** raggruppa configurazioni riutilizzabili. Un modulo database può richiedere dimensioni e rete ed esporre l'endpoint. Non dovrebbe nascondere decisioni fondamentali o offrire centinaia di opzioni senza un contratto chiaro. Il versionamento rende controllata l'evoluzione per gli ambienti che lo utilizzano.
 
-In team è opportuno utilizzare:
-- remote backend
-- locking
-- encryption
-- access control
-- versioning
-- backup/recovery dello state
+Dev, staging e produzione possono usare moduli condivisi con configurazioni distinte. Directory, repository e workspace sono strumenti organizzativi; un workspace da solo non dimostra un confine di sicurezza. Credenziali, permessi e backend separati definiscono l'isolamento effettivo.
 
-Mai inserire secret direttamente nel repository o nello state senza considerare le implicazioni di sicurezza.
+## Capire che cosa rappresenta lo state
 
-## Workflow
-`terraform fmt → validate → plan → review → apply`
+Lo **state** collega indirizzi nella configurazione e risorse reali, conservando anche attributi utili alla gestione. Un **remote backend** rende disponibile lo state al team; il **locking**, quando supportato e configurato, impedisce operazioni concorrenti incompatibili sullo stesso stato.
 
-In CI/CD l'`apply` dovrebbe essere controllato e autorizzato, mentre il `plan` può essere prodotto automaticamente come artifact della pipeline.
+Si proteggono accessi, cifratura, versioni e backup dello state. Dati sensibili possono finirvi anche senza essere scritti in chiaro nei sorgenti. Dichiarare un valore `sensitive` ne limita alcune visualizzazioni, ma non equivale a cifrare o eliminare il valore dallo stato. Il secret manager e l'identità che lo accede vanno progettati insieme.
 
-## Environment Strategy
-Possibili approcci:
-- directory separate
-- workspace
-- repository separati
-- moduli riutilizzabili + configurazioni per ambiente
+## Dal piano alla modifica
 
-L'obiettivo è evitare duplicazione mantenendo comunque isolamento e controllo tra dev, staging e production.
+Il percorso abituale è `fmt`, `validate`, `plan`, revisione e `apply`. `fmt` uniforma il formato; `validate` controlla la configurazione; `plan` mostra le modifiche previste. `apply` esegue operazioni reali e non è una transazione atomica su tutta l'infrastruttura.
 
-## Drift Detection
-Il drift si verifica quando l'infrastruttura reale viene modificata al di fuori di Terraform.
+La pipeline produce un piano revisionabile e controlla policy, costo e sicurezza. La **policy as code** rende automatizzabili regole come il divieto di esporre un database pubblicamente. Gli ambienti protetti e i permessi limitati controllano chi può applicare le modifiche. Gli smoke test successivi verificano le funzioni essenziali dell'infrastruttura risultante.
 
-Best practice: ridurre il Click-Ops e fare emergere il drift tramite `terraform plan` e controlli automatizzati.
+## Drift e fallimenti parziali
 
-## Infrastructure as Code nella CI/CD
-Pipeline tipica:
+Il **drift** è lo scostamento tra risorse reali e stato previsto, spesso dovuto a modifiche manuali. Un nuovo piano può mostrarlo; bisogna decidere se riportare la risorsa alla configurazione o aggiornare consapevolmente il codice. Ridurre il **Click-Ops**, cioè gestione manuale tramite console, aiuta la tracciabilità senza eliminare procedure di emergenza controllate.
 
-`Git commit → validate → security scan → terraform plan → approval → terraform apply → smoke test`
+Se un apply fallisce a metà, alcune risorse possono essere già cambiate. Si leggono errori e stato reale, si produce un nuovo piano e si decide il recupero. Tornare a un vecchio commit non garantisce un rollback sicuro: rimuovere una risorsa può distruggere dati. Import, correzioni e ripristini richiedono un piano concreto, non la ripetizione automatica dello stesso comando.
 
-Possibili controlli:
-- policy as code
-- cost estimation
-- security scanning
-- code review
-- protected environments
+## Scegliere lo strumento in base ai vincoli
 
-## Terraform vs CloudFormation vs AWS CDK
-- **Terraform**: multi-cloud, ampia ecosystem e modello dichiarativo.
-- **CloudFormation**: servizio IaC nativo AWS.
-- **AWS CDK**: definisce infrastruttura AWS usando linguaggi di programmazione e genera CloudFormation.
+Terraform integra più piattaforme mediante provider. CloudFormation è il servizio dichiarativo AWS; AWS CDK esprime l'infrastruttura in linguaggi di programmazione e sintetizza template CloudFormation. Portabilità, competenze e governance contano più di una classifica astratta.
 
-La scelta dipende da cloud strategy, competenze del team, governance e necessità di portabilità.
-
-## Secrets
-Terraform non deve essere usato come sistema di secret management. Integrare invece secret manager e IAM, limitando esposizione e privilegi.
-
-## Domande da colloquio
-1. Cos'è il Terraform state?
-2. Perché serve il locking?
-3. Come gestisci Terraform in un team?
-4. Cos'è il drift?
-5. Come strutturi dev/staging/prod?
-6. Come integri Terraform in CI/CD?
-7. Come gestisci i secret?
-8. Terraform vs CloudFormation?
-9. Quando preferiresti CDK?
-10. Come impedisci modifiche manuali all'infrastruttura?
-11. Come gestisci un `terraform apply` fallito a metà?
-12. Come fai rollback dell'infrastruttura?
-
-## Regola Senior
-IaC non significa soltanto "creare risorse con Terraform": significa rendere l'infrastruttura **riproducibile, revisionabile, sicura, testabile e governata attraverso il ciclo di vita del software**.
+Per esercitarti, descrivi una modifica di rete che rischia di interrompere l'accesso a un database. Spiega come leggeresti il piano, quale verifica farebbe la pipeline e come recupereresti se soltanto alcune operazioni venissero eseguite.

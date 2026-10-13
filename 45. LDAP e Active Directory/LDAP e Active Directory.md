@@ -1,164 +1,47 @@
 # 45. LDAP e Active Directory
 
-## Obiettivo
-Comprendere come integrare applicazioni Java enterprise con directory aziendali come LDAP e Microsoft Active Directory, distinguendo autenticazione, ricerca delle identità e autorizzazione.
+## Una directory non è un normale database applicativo
 
-## LDAP
-LDAP (Lightweight Directory Access Protocol) è un protocollo per interrogare e modificare directory gerarchiche.
+**LDAP**, Lightweight Directory Access Protocol, permette di interrogare e modificare una directory gerarchica. La directory organizza identità e attributi in **entry**, elementi descritti da uno schema. Una **object class** stabilisce categorie e attributi ammessi o richiesti; il server applica lo schema e i permessi.
 
-Concetti fondamentali:
-- Directory Server
-- Entry
-- DN (Distinguished Name)
-- RDN (Relative Distinguished Name)
-- Attribute
-- Object Class
-- Schema
-- Base DN
-- Bind
-- Search
-- Filter
+Il **DN**, Distinguished Name, identifica un elemento mediante il percorso completo. Il **RDN**, Relative Distinguished Name, è la parte relativa al suo contenitore. In `CN=Mario Rossi,OU=Users,DC=company,DC=com`, `CN` indica il nome comune, `OU` l'unità organizzativa e `DC` una componente del dominio. Il **Base DN** è il punto dal quale parte una ricerca.
 
-Esempio concettuale:
+Un'operazione **search** cerca entry usando base, ambito e filtro. Un filtro come `(uid=mario)` seleziona un attributo; input non fidato richiede escaping appropriato per evitare LDAP injection. Un filtro LDAP e un percorso DN hanno regole di escaping differenti.
+
+## Autenticare mediante bind
+
+Il **bind** associa un'identità alla connessione. Nel caso di bind con credenziali dell'utente, il server ne verifica l'autenticazione. Un'applicazione può prima cercare il DN attraverso un account tecnico con privilegi di lettura limitati e poi tentare il bind dell'utente.
+
+La ricerca non autentica: trovare un nome non dimostra il possesso della credenziale. Anche il risultato del bind non attribuisce tutti i permessi applicativi. L'applicazione recupera gruppi o attributi secondo il contratto e li traduce nelle proprie politiche.
+
+## Che cosa aggiunge Active Directory
+
+**Active Directory Domain Services**, AD DS, è una piattaforma Microsoft che integra directory, LDAP e altri servizi di dominio. Un **domain controller** eroga i servizi del dominio; un'**Organizational Unit** organizza oggetti; un **security group** rappresenta un insieme di soggetti cui possono essere associati permessi.
+
+L'**UPN**, User Principal Name, identifica comunemente un utente con forma simile a `nome@dominio`. Le **Group Policy** distribuiscono configurazioni e regole ai sistemi del dominio. **Kerberos** autentica attraverso ticket, riducendo la trasmissione ripetuta della password ai servizi. LDAP è quindi un protocollo usato dalla piattaforma, non un sinonimo di Active Directory.
+
+## Proteggere il canale e gli account
+
+**LDAPS** usa TLS fin dall'apertura del canale; **StartTLS** aggiorna una connessione LDAP a un canale protetto. In entrambi i casi il client deve validare certificato e nome del server. Il **truststore** Java contiene le autorità considerate fidate secondo la configurazione; disabilitare i controlli per superare un errore rimuove proprio quella verifica.
+
+Un **service account** appartiene all'integrazione applicativa e ha privilegi minimi, rotazione e audit. Evita di legare il servizio alle credenziali personali di un dipendente. Password e altre credenziali richiedono distribuzione protetta e limiti di accesso.
+
+## Integrare identità e autorizzazioni in Spring
+
+Spring Security può usare un provider LDAP. Con `LdapBindAuthenticationManagerFactory` si configurano ricerca dell'utente e bind; gli **user DN pattern** sono una possibile alternativa quando il percorso è prevedibile. La ricerca dei gruppi alimenta le **authority**, permessi riconosciuti dall'applicazione.
+
 ```text
-DC=company,DC=com
- ├── OU=Users
- │    ├── CN=Mario Rossi
- │    └── CN=Anna Bianchi
- └── OU=Groups
-      ├── CN=Developers
-      └── CN=Admins
+Gruppo directory: Payment-Operators
+        → authority applicativa: PAYMENT_OPERATOR
+        → regole sulle operazioni e sui conti consentiti
 ```
 
-## LDAP Authentication
-Un'applicazione può autenticare un utente effettuando un bind con le sue credenziali oppure utilizzando un account tecnico per cercare l'utente e successivamente verificarne le credenziali.
+La traduzione non deve rendere ogni membro automaticamente amministratore. Si distinguono autenticazione, appartenenza a gruppi e autorizzazione sulle singole risorse. Pattern di utenti e filtri dipendono dallo schema reale: un esempio generico con `uid` non vale necessariamente per la directory aziendale.
 
-Flusso tipico:
-```text
-User
-  ↓ username/password
-Application
-  ↓ LDAP search
-Directory
-  ↓ user DN
-Application
-  ↓ bind/authentication
-LDAP Server
-  ↓ success/failure
-Application
-```
+## Disponibilità e integrazione con un Identity Provider
 
-## Active Directory
-Microsoft Active Directory Domain Services (AD DS) utilizza LDAP per l'accesso alla directory, ma offre anche altri meccanismi e servizi, tra cui Kerberos, DNS e gestione centralizzata di utenti, gruppi e computer.
+Pool di connessioni, timeout e monitoraggio limitano il costo della directory. I retry non devono moltiplicare tentativi su password errate né aggravare un domain controller già in difficoltà. La cache di gruppi può ridurre il carico ma ritardare la revoca: durata e dati cacheabili sono una scelta di sicurezza.
 
-Concetti da conoscere:
-- Domain
-- Domain Controller
-- Organizational Unit (OU)
-- Security Group
-- User Principal Name (UPN)
-- Service Account
-- Group Policy
-- Kerberos
-- LDAP/LDAPS
+Un **Identity Provider** può integrare LDAP o AD ed esporre OIDC alle applicazioni. In questo modo i servizi non devono ricevere direttamente la password della directory. Rimangono da definire aggiornamento dei gruppi, revoca e comportamento in caso di indisponibilità del provider.
 
-## LDAP vs Active Directory
-LDAP è principalmente un protocollo; Active Directory è una piattaforma directory completa di Microsoft che implementa LDAP e integra altri servizi di dominio.
-
-## LDAPS e sicurezza
-LDAP in chiaro espone le credenziali e i dati della directory. Per proteggere la comunicazione utilizzare:
-- LDAPS (LDAP over TLS)
-- LDAP con StartTLS
-- certificati validati correttamente
-- truststore Java configurato correttamente
-
-Non disabilitare la verifica dei certificati per risolvere problemi TLS in produzione.
-
-## Spring Security + LDAP
-Spring Security può integrare LDAP come Authentication Provider.
-
-Concetti:
-- `LdapBindAuthenticationManagerFactory`
-- LDAP search
-- user DN patterns
-- group search
-- authorities
-- password validation
-
-Esempio concettuale:
-```java
-@Bean
-AuthenticationManager ldapAuthenticationManager(BaseLdapPathContextSource contextSource) {
-    LdapBindAuthenticationManagerFactory factory =
-        new LdapBindAuthenticationManagerFactory(contextSource);
-    factory.setUserSearchBase("ou=Users");
-    factory.setUserSearchFilter("(uid={0})");
-    return factory.createAuthenticationManager();
-}
-```
-
-## Authentication vs Authorization
-LDAP/AD può fornire l'identità e i gruppi dell'utente, ma l'applicazione deve decidere come trasformare quei gruppi in autorizzazioni applicative.
-
-Esempio:
-```text
-AD Group: CN=Payment-Operators
-          ↓
-Application authority: PAYMENT_OPERATOR
-          ↓
-@PreAuthorize("hasAuthority('PAYMENT_OPERATOR')")
-```
-
-## Service Accounts
-Per integrazioni applicative usare account tecnici dedicati con:
-- privilegi minimi
-- password/secret gestiti tramite secret manager
-- rotazione delle credenziali
-- audit degli accessi
-- divieto di utilizzo di account personali
-
-## Caching e disponibilità
-LDAP può diventare una dipendenza critica. Valutare:
-- connection pooling
-- timeout
-- retry controllati
-- caching delle informazioni non sensibili quando appropriato
-- fallback limitati
-- monitoring della directory
-
-Non usare retry aggressivi su LDAP: un Domain Controller degradato può essere ulteriormente sovraccaricato.
-
-## Integrazione enterprise
-Architettura tipica:
-```text
-Browser / Client
-      ↓
-API Gateway
-      ↓
-Spring Boot Application
-      ↓
-Spring Security
-      ↓
-LDAP / Active Directory
-      ↓
-Gruppi / Identità
-```
-
-In architetture moderne LDAP/AD può essere integrato anche con un Identity Provider che espone OAuth2/OIDC, evitando di propagare direttamente le credenziali LDAP alle applicazioni.
-
-## Domande da colloquio
-1. Cos'è LDAP?
-2. LDAP e Active Directory sono la stessa cosa?
-3. Cos'è un DN?
-4. Differenza tra LDAP e LDAPS?
-5. Cos'è un bind LDAP?
-6. Come integreresti Active Directory con Spring Security?
-7. Come trasformi i gruppi AD in ruoli applicativi?
-8. Perché usare un service account?
-9. Come gestisci timeout e indisponibilità del Domain Controller?
-10. LDAP authentication vs OAuth2/OIDC: quando useresti ciascuno?
-11. Come proteggeresti le credenziali LDAP?
-12. Perché non conviene far dipendere ogni microservizio direttamente da AD?
-
-## Regola Senior
-LDAP/Active Directory è spesso un sistema di identità enterprise. In una nuova architettura è importante separare **identity provider, autenticazione e autorizzazione applicativa**, evitando di distribuire credenziali directory tra i microservizi.
+Per esercitarti, segui il login di un operatore e l'accesso a un pagamento. Spiega dove viene verificata la password, dove sono tradotti i gruppi e come un permesso revocato raggiunge l'applicazione.

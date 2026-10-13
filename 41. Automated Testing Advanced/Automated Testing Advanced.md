@@ -1,147 +1,41 @@
-# 41. Automated Testing — Advanced
+# 41. Progettare una strategia di test
 
-## Obiettivo
-Approfondire il testing di applicazioni Java/Spring e sistemi distribuiti, con particolare attenzione a qualità, velocità della pipeline e fiducia nei rilasci.
+## Scegliere il livello che osserva il rischio
 
-## Test Pyramid
+La **piramide dei test** suggerisce molti controlli rapidi e un numero più contenuto di verifiche costose. Un **unit test** osserva una piccola unità di comportamento; un **integration test** verifica la collaborazione reale con un componente o una dipendenza. Un **component test** verifica un servizio nel suo insieme con confini esterni controllati. Un **contract test** verifica aspettative tra servizi; un **end-to-end test**, E2E, percorre una funzione attraverso il sistema completo.
 
-Livelli principali:
-- Unit test
-- Integration test
-- Component test
-- Contract test
-- End-to-End test
+Non esiste una proporzione valida per ogni progetto. Una regola di calcolo richiede soprattutto verifiche locali; un problema di isolamento transazionale richiede un database con comportamento reale. L'obiettivo è rilevare le regressioni importanti rapidamente e con un risultato affidabile.
 
-La maggior parte dei test dovrebbe essere veloce e isolata; i test più costosi e realistici devono essere usati dove aggiungono realmente valore.
+## Isolare il calcolo, senza imitare il codice
 
-## Unit Testing
-Con JUnit 5 e Mockito:
-- testare una singola unità
-- mock delle dipendenze esterne
-- verificare comportamento e risultati
-- evitare di testare dettagli implementativi inutili
+JUnit organizza ed esegue i test. Mockito crea sostituti controllati: un **mock** può simulare risposte e registrare interazioni; uno **spy** avvolge un oggetto reale e richiede attenzione agli effetti della sua esecuzione. `@Mock` dichiara i mock e `@InjectMocks` tenta di inserirli nell'oggetto sotto test; non avvia il container Spring. `ArgumentCaptor` permette di esaminare argomenti passati a una dipendenza quando questi fanno parte del comportamento da verificare.
 
-### Esempio
-```java
-@ExtendWith(MockitoExtension.class)
-class PaymentServiceTest {
-    @Mock PaymentRepository repository;
-    @InjectMocks PaymentService service;
+Un buon test prepara dati, esegue l'azione e verifica un esito significativo. Non dovrebbe dipendere dall'ordine di chiamate interne irrilevanti. Per una commissione, importo, valuta e arrotondamento sono risultati utili; contare una chiamata a un metodo privato lega il test all'implementazione.
 
-    @Test
-    void shouldCreatePayment() {
-        // arrange
-        // act
-        // assert
-    }
-}
-```
+## Verificare integrazioni e configurazione
 
-## Integration Testing
-Serve a verificare l'integrazione reale tra componenti:
-- Spring context
-- database
-- REST API
-- messaging
-- configurazione
+`@SpringBootTest` avvia un contesto applicativo ampio. Le **test slice**, come `@WebMvcTest`, caricano un insieme mirato di componenti. MockMvc esercita il livello MVC senza necessariamente aprire una porta reale; WebTestClient può verificare risposte web nei contesti supportati. WireMock simula un server HTTP esterno con risposte ed errori controllati.
 
-Tecnologie utili:
-- `@SpringBootTest`
-- MockMvc
-- WebTestClient
-- Testcontainers
-- WireMock
+**Testcontainers** avvia dipendenze reali in container: database, broker e cache. È utile per SQL specifico, transazioni, serializzazione e configurazione del protocollo. Un database embedded con dialetto diverso potrebbe nascondere una query incompatibile con produzione. Anche il container non riproduce automaticamente rete, dimensioni e topologia produttiva: il perimetro del test deve essere chiaro.
 
-## Testcontainers
-Permette di eseguire dipendenze reali in container durante i test, ad esempio:
-- PostgreSQL
-- MySQL
-- Kafka
-- RabbitMQ
-- Redis
+## Mantenere i contratti tra servizi
 
-È preferibile a un database embedded quando si vogliono verificare comportamenti specifici del database reale.
+Nel **consumer-driven contract** il consumer esplicita le risposte o i messaggi che si aspetta. La **provider verification** controlla che il producer li soddisfi. Pact e Spring Cloud Contract aiutano a eseguire queste verifiche senza avviare ogni servizio insieme.
 
-## Contract Testing
-Verifica che producer e consumer rispettino un contratto condiviso senza richiedere un test end-to-end completo.
+La backward compatibility comprende significato e forma: una modifica da centesimi a euro può mantenere un campo numerico e rompere tutti i calcoli. Per gli eventi si verificano campi opzionali, valori sconosciuti ed evoluzione dello schema; per HTTP status, corpo, errori e autorizzazioni. Un test di contratto non dimostra da solo il funzionamento dell'intero processo.
 
-Concetti:
-- Consumer-driven contract
-- Provider verification
-- Backward compatibility
-- API schema evolution
+## Provare i guasti che il dominio teme
 
-Strumenti comuni: Pact e Spring Cloud Contract.
+Per un consumer di pagamenti verifica duplicati, ordine richiesto e crash tra effetto e conferma. Per il retry prova un errore temporaneo e uno permanente; per la DLQ verifica sia l'invio sia il successivo recupero. Con un broker reale puoi osservare offset e riconsegne invece di simulare soltanto una chiamata a `send`.
 
-## Messaging Testing
-Per Kafka/RabbitMQ verificare:
-- pubblicazione corretta
-- consumo
-- retry
-- DLQ
-- ordering quando richiesto
-- idempotenza
-- gestione degli errori
+Un test **flaky** alterna successo e fallimento senza una modifica rilevante. Spesso dipende da tempo, stato condiviso o attese arbitrarie. Nei test asincroni usa condizioni osservabili e scadenze, isola i dati e conserva evidenze del fallimento. Aumentare indiscriminatamente i timeout rende la pipeline lenta senza chiarire la causa.
 
-Con Testcontainers è possibile eseguire test contro un broker reale invece di mockare completamente la messaggistica.
+## TDD, BDD e pipeline
 
-## REST API Testing
-Testare almeno:
-- HTTP status
-- response body
-- validation
-- authentication/authorization
-- error handling
-- backward compatibility
-- timeout/error scenarios
+Il **Test-Driven Development**, TDD, alterna un test che fallisce per il comportamento mancante, il codice necessario a farlo passare e il refactoring. Il **Behavior-Driven Development**, BDD, rende condivisibili gli esempi di business mediante condizioni iniziali, azione e risultato, spesso espressi come Given, When, Then.
 
-## TDD e BDD
-### TDD
-Ciclo:
-1. Red
-2. Green
-3. Refactor
+La CI può eseguire prima verifiche rapide e poi integrazione, contratti e pochi percorsi E2E critici. Un **quality gate** è una condizione che blocca la promozione, per esempio un contratto incompatibile. La **coverage** misura codice attraversato, non la qualità delle asserzioni. Load e performance test, descritti nel capitolo 35, completano i controlli quando contano capacità e latenza.
 
-### BDD
-Descrive il comportamento dal punto di vista del business:
-- Given
-- When
-- Then
+## Un esercizio di progettazione
 
-BDD è particolarmente utile quando requisiti e comportamento devono essere condivisi tra business e team tecnico.
-
-## CI/CD e Quality Gates
-Una pipeline tipica:
-
-`Build → Unit Tests → Static Analysis → Integration Tests → Contract Tests → Package → Deploy`
-
-Quality gate possibili:
-- test coverage
-- SonarQube
-- SAST
-- dependency vulnerability scan
-- contract verification
-
-## Test Strategy per Microservizi
-Non cercare di verificare tutto con E2E test. Combinare:
-- unit test per business logic
-- integration test per DB/framework
-- contract test per API/eventi
-- pochi E2E test per journey critici
-
-## Domande da colloquio
-1. Unit test vs integration test?
-2. Quando useresti Testcontainers?
-3. Perché evitare di mockare completamente il database?
-4. Cos'è un consumer-driven contract?
-5. Come testeresti un consumer Kafka?
-6. Come testi retry e DLQ?
-7. Qual è una buona test pyramid per microservizi?
-8. TDD è sempre necessario?
-9. Come integri i test nella CI/CD pipeline?
-10. Come eviti test flaky?
-11. Come decidi cosa testare con E2E?
-12. Code coverage elevata significa automaticamente alta qualità?
-
-## Regola Senior
-Il valore del testing non è la percentuale di coverage in sé, ma la capacità della suite di **intercettare regressioni importanti rapidamente e in modo affidabile**.
+Per un pagamento con un provider esterno, separa test di calcolo, integrazione col database, contratto HTTP e un percorso E2E. Scegli dove verificare un timeout seguito da risposta tardiva e spiega perché quel livello può osservare l'errore che vuoi prevenire.

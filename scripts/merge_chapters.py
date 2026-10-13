@@ -1,63 +1,99 @@
 #!/usr/bin/env python3
-import os
+"""Genera le edizioni Markdown e testo dai capitoli e dalla prefazione."""
+from pathlib import Path
 import re
-from datetime import datetime, timezone
+
+
+def load_chapters(repo_root):
+    chapters = []
+    for directory in sorted(repo_root.iterdir()):
+        if not directory.is_dir() or not re.match(r"^\d{2}\.", directory.name):
+            continue
+        sources = sorted(directory.glob("*.md"))
+        if len(sources) != 1:
+            raise ValueError(f"Atteso un solo capitolo Markdown in {directory.name}")
+        content = sources[0].read_text(encoding="utf-8").strip()
+        lines = content.splitlines()
+        if not lines or not lines[0].startswith("# "):
+            raise ValueError(f"Titolo principale mancante in {sources[0]}")
+        chapters.append((directory.name[:2], lines[0][2:], content))
+    if not chapters:
+        raise ValueError("Nessun capitolo trovato")
+    return chapters
+
+
+def lower_headings(content):
+    """Inserisce i capitoli sotto il titolo del libro, preservando il codice."""
+    lines = []
+    fence = None
+    for line in content.splitlines():
+        marker = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if re.fullmatch(r"\s*" + re.escape(fence) + r"\s*", line):
+                fence = None
+        elif marker:
+            fence = marker.group(1)
+        elif re.match(r"^#{1,5} ", line):
+            line = "#" + line
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def plain_text(markdown):
+    """Rimuove la sintassi editoriale, lasciando intatti esempi e diagrammi."""
+    lines = []
+    fence = None
+    for line in markdown.splitlines():
+        marker = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if re.fullmatch(r"\s*" + re.escape(fence) + r"\s*", line):
+                fence = None
+            else:
+                lines.append(line)
+            continue
+        if marker:
+            fence = marker.group(1)
+            continue
+        if re.fullmatch(r'<a id="[^"]+"></a>', line):
+            continue
+        line = re.sub(r"^#{1,6}\s+", "", line)
+        line = re.sub(
+            r"\[([^\]]+)\]\(([^)]+)\)",
+            lambda match: (
+                f"{match.group(1)} ({match.group(2)})"
+                if match.group(2).startswith(("https://", "http://"))
+                else match.group(1)
+            ),
+            line,
+        )
+        line = line.replace("**", "").replace("`", "")
+        line = re.sub(r"(?<!\w)\*([^*\n]+)\*(?!\w)", r"\1", line)
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
+
 
 def merge_chapters():
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    output_txt = os.path.join(repo_root, "guida-colloquio-completa.txt")
-    output_md = os.path.join(repo_root, "guida-colloquio-completa.md")
+    repo_root = Path(__file__).resolve().parent.parent
+    chapters = load_chapters(repo_root)
+    preface = (repo_root / "PREFAZIONE.md").read_text(encoding="utf-8").strip()
+    sections = [
+        "# Guida al colloquio per Java Backend Developer",
+        preface,
+        f"## Indice\n\nL'edizione comprende {len(chapters)} capitoli.\n\n"
+        + "\n".join(f"- [{title}](#capitolo-{number})" for number, title, _ in chapters),
+    ]
+    for number, _, content in chapters:
+        sections.append(f'<a id="capitolo-{number}"></a>\n\n{lower_headings(content)}')
+    markdown = "\n\n".join(sections) + "\n"
+    outputs = {
+        "guida-colloquio-completa.md": markdown,
+        "guida-colloquio-completa.txt": plain_text(markdown),
+    }
+    for name, content in outputs.items():
+        path = repo_root / name
+        path.write_text(content, encoding="utf-8")
+        print(f"Generato {name}: {len(chapters)} capitoli, {path.stat().st_size} byte")
 
-    # Trova tutte le cartelle che iniziano con due cifre numeriche (es. 01., 02., ..., 35.)
-    dirs = [d for d in os.listdir(repo_root) if os.path.isdir(os.path.join(repo_root, d)) and re.match(r"^\d{2}\.", d)]
-    dirs.sort()
-
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    header = f"""================================================================================
-GUIDA DI STUDIO COMPLETA — COLLOQUIO SENIOR JAVA BACKEND DEVELOPER
-Generato automaticamente il: {now}
-Totale capitoli inclusi: {len(dirs)}
-================================================================================
-
-INDICE DEI CAPITOLI:
-"""
-    for d in dirs:
-        header += f"  - {d}\n"
-    header += "\n" + "=" * 80 + "\n\n"
-
-    merged_content = [header]
-
-    for d in dirs:
-        dir_path = os.path.join(repo_root, d)
-        md_files = [f for f in os.listdir(dir_path) if f.endswith(".md")]
-        if not md_files:
-            continue
-        
-        # Prende il file principale markdown nella cartella
-        md_file = sorted(md_files)[0]
-        file_path = os.path.join(dir_path, md_file)
-        
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        
-        chapter_separator = f"\n\n{'#' * 80}\n### CAPITOLO: {d}\n{'#' * 80}\n\n"
-        merged_content.append(chapter_separator)
-        merged_content.append(content)
-        merged_content.append("\n\n")
-
-    final_text = "".join(merged_content)
-
-    # Scrive sia il file .txt che il file .md
-    with open(output_txt, "w", encoding="utf-8") as f:
-        f.write(final_text)
-
-    with open(output_md, "w", encoding="utf-8") as f:
-        f.write(final_text)
-
-    print(f"Unione completata con successo!")
-    print(f"File TXT generato: {output_txt} ({os.path.getsize(output_txt)} bytes)")
-    print(f"File MD generato:  {output_md} ({os.path.getsize(output_md)} bytes)")
 
 if __name__ == "__main__":
     merge_chapters()

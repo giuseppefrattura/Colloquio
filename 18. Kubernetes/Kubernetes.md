@@ -1,19 +1,16 @@
 # 18. Kubernetes
 
-### Cos'è
-Piattaforma di **orchestrazione container**, che gestisce automaticamente deployment, scaling, self-healing e networking di applicazioni containerizzate (tipicamente Docker). Non esegue direttamente il codice: coordina container su un cluster di macchine (nodi).
+## Dichiarare come deve funzionare un carico
 
-### Caratteristiche principali
+Kubernetes coordina carichi containerizzati su un **cluster**, insieme di nodi. L'API conserva lo stato desiderato; i controller confrontano tale stato con quello osservato e cercano di riconciliarli. Questa **reconciliation** è un ciclo continuo, non una promessa che ogni guasto sia risolto immediatamente.
 
-- **Pod**: unità minima di deployment — uno o più container che condividono rete e storage, eseguiti sempre insieme sullo stesso nodo
-- **Deployment**: definisce quante repliche di un pod devono essere in esecuzione e gestisce gli aggiornamenti (rolling update) senza downtime
-- **Service**: espone un insieme di pod come un endpoint di rete stabile, con load balancing automatico tra le repliche — anche se i pod vengono ricreati con IP diversi, il Service resta raggiungibile allo stesso indirizzo
-- **ConfigMap e Secret**: configurazione esterna all'immagine del container (coerente col principio 12-factor già visto nel punto 9) — ConfigMap per configurazioni non sensibili, Secret per credenziali/chiavi
-- **Horizontal Pod Autoscaler**: scala automaticamente il numero di pod in base a metriche (es. CPU) — implementazione concreta dell'auto-scaling già visto nel punto 9
-- **Liveness/Readiness probe**: health check che Kubernetes usa per capire se un pod è vivo (liveness — altrimenti lo riavvia) e se è pronto a ricevere traffico (readiness — altrimenti lo esclude temporaneamente dal load balancing) — implementazione concreta di health check e self-healing (punto 9)
-- **Namespace**: partizione logica del cluster, utile per isolare ambienti (dev, staging, produzione) o team diversi
+Un **Pod** è l'unità di esecuzione: i suoi container condividono rete e possono condividere volumi. Un **Deployment** gestisce repliche di pod intercambiabili e aggiornamenti. Un **Service** offre un riferimento stabile a un insieme di endpoint selezionati, evitando che il client debba inseguire ogni IP dei pod.
 
-### Esempio concettuale (non serve saperlo scrivere a memoria, ma riconoscerlo)
+## Distinguere salute, disponibilità e capacità
+
+La **liveness probe** verifica una condizione che può giustificare il riavvio del container. La **readiness probe** determina se il pod è pronto a ricevere traffico. Una **startup probe** consente un avvio lungo prima di applicare gli altri controlli. Un problema di una dipendenza condivisa non dovrebbe automaticamente far riavviare tutte le istanze.
+
+Le **request** di risorse aiutano il scheduler a collocare il pod; i **limit** impongono vincoli di uso secondo la risorsa e il runtime. L'**Horizontal Pod Autoscaler**, HPA, modifica le repliche in base alle metriche configurate. Non crea capacità illimitata: nodi e dipendenze devono sostenerla.
 
 ```yaml
 apiVersion: apps/v1
@@ -22,11 +19,19 @@ metadata:
   name: authorization-service
 spec:
   replicas: 3
+  selector:
+    matchLabels:
+      app: authorization-service
   template:
+    metadata:
+      labels:
+        app: authorization-service
     spec:
       containers:
         - name: authorization-service
           image: registry.company.com/authorization-service:1.4.0
+          ports:
+            - containerPort: 8080
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
@@ -37,13 +42,16 @@ spec:
               memory: "512Mi"
 ```
 
-### Rilevanza per il dominio pagamenti
-In un sistema mission-critical, Kubernetes garantisce che un servizio come `authorization-service` resti sempre disponibile con più repliche, si riavvii automaticamente in caso di crash (self-healing), e scali automaticamente nei picchi di traffico — tutto senza intervento manuale. I probe di readiness sono particolarmente importanti: un servizio di pagamento non ancora pronto (es. connessione DB non ancora stabilita all'avvio) non deve ricevere traffico prematuramente.
+L'esempio ha selector e label corrispondenti; immagine e percorso di salute sono illustrativi e devono esistere nell'ambiente. Non include Service, configurazione o una politica completa delle risorse. Tre repliche aumentano la capacità di recupero soltanto se collocazione e dipendenze evitano guasti comuni.
 
-### Domande tipiche e risposte
+## Configurazione e confini
 
-- *D: Che differenza c'è tra liveness e readiness probe?*
-  R: La liveness probe dice a Kubernetes "sono vivo o devo essere riavviato?" — se fallisce, il pod viene ucciso e ricreato. La readiness probe dice "sono pronto a ricevere traffico in questo momento?" — se fallisce, il pod resta in esecuzione ma viene temporaneamente escluso dal load balancing, utile ad esempio durante l'avvio o se una dipendenza esterna è momentaneamente non raggiungibile.
+Una **ConfigMap** conserva configurazione non sensibile. Un **Secret** è l'oggetto destinato a dati sensibili, ma base64 è codifica, non cifratura: servono protezione dello storage e accessi limitati. La [documentazione dei Secret](https://kubernetes.io/docs/concepts/configuration/secret/) chiarisce le misure necessarie.
 
-- *D: Come gestisce Kubernetes un deployment senza downtime?*
-  R: Con un **rolling update**: crea gradualmente i nuovi pod con la versione aggiornata, aspetta che passino la readiness probe, e solo allora rimuove gradualmente i pod vecchi — mantenendo sempre un numero minimo di repliche disponibili durante la transizione. Si collega al blue-green/canary già visti nel punto 11, che in Kubernetes si implementano con strategie di deployment più sofisticate sopra questo meccanismo base.
+Un **Namespace** organizza e delimita nomi e policy. Non offre automaticamente isolamento completo tra team o ambienti: autorizzazioni, quote e policy di rete completano il confine. Uno storage persistente richiede un progetto proprio per conservazione, accesso e recupero; ricreare un pod non ricostruisce dati persi.
+
+## Aggiornare senza interrompere la funzione
+
+Un **rolling update** fa convivere gradualmente pod vecchi e nuovi secondo la strategia configurata. La readiness aiuta a inviare traffico alle istanze pronte, ma assenza di downtime richiede anche capacità, gestione delle connessioni e compatibilità. La [documentazione dei Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) descrive questi meccanismi.
+
+Per esercitarti, aggiorna mentalmente un servizio di autorizzazione mentre alcune richieste sono in corso. Spiega come vengono terminate le vecchie istanze, come viene confermata la disponibilità delle nuove e come due versioni possono usare lo stesso schema senza rompere i dati.

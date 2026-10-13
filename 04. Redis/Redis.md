@@ -1,41 +1,40 @@
-# 4. Redis e Caching Distribuito
+# 4. Redis e caching distribuito
 
-### Cos'è
-Database **in-memory key-value**, estremamente veloce (dati tenuti in RAM), usato principalmente come cache, ma anche come message broker leggero (pub/sub), store di sessioni, o per strutture dati specializzate (contatori, code, set, sorted set).
+## Perché mettere una copia dei dati in memoria
 
-### Caratteristiche principali
+Una **cache** conserva dati già ottenuti o risultati già calcolati per evitare di ripetere lavoro costoso. Redis mantiene i dati principalmente in memoria e offre un modello chiave-valore con strutture specializzate. In un servizio di pagamenti può conservare configurazioni dei merchant, cioè gli esercenti, oppure risultati di letture frequenti. Prima di usarlo bisogna decidere qual è la fonte autorevole e quanto può essere vecchia una copia.
 
-- **Strutture dati ricche**: non solo stringhe, ma anche liste, set, hash, sorted set (utili per classifiche/ranking), tutte con operazioni atomiche native
-- **Persistenza opzionale**: pur essendo in-memory, supporta snapshot su disco (RDB) o log delle operazioni (AOF) per non perdere tutto in caso di riavvio — comunque non sostituisce un DB transazionale
-- **TTL (Time To Live)**: ogni chiave può avere una scadenza automatica — fondamentale per cache che non deve restare stale indefinitamente
-- **Operazioni atomiche**: es. `INCR` per contatori concorrenti senza race condition, utile per rate limiting
-- **Pub/Sub**: meccanismo di messaggistica semplice (non persistente come Kafka — se non c'è un subscriber attivo, il messaggio si perde)
-- **Cluster mode**: sharding automatico dei dati su più nodi per scalabilità orizzontale
+Il vantaggio non deriva soltanto dalla RAM. Redis offre operazioni su stringhe, hash, liste e set. Un **hash** raggruppa campi associati a una chiave; un **set** contiene valori unici; un **sorted set** associa ai membri un punteggio, utile per classifiche. Comandi come `INCR` aggiornano un contatore atomicamente: due client non eseguono un fragile ciclo separato di lettura e scrittura.
 
-### Esempio di utilizzo (Spring Boot)
+## Scadenza, invalidazione e memoria
+
+Il **TTL**, Time To Live, è la durata oltre la quale una chiave scade. Limita la permanenza di una copia, ma non la rende aggiornata subito dopo ogni modifica della fonte. Un dato **stale** è una copia obsoleta: per alcune configurazioni è accettabile per pochi secondi, per decidere se autorizzare una spesa può non esserlo.
+
+Nel modello **cache-aside** l'applicazione cerca prima in cache e, in caso di assenza, legge la fonte e popola la copia. Dopo una scrittura deve invalidare o aggiornare la cache secondo una strategia coerente. Con Spring, `@Cacheable` esprime il riuso di un risultato, ma richiede un cache manager configurato: l'annotazione da sola non seleziona Redis.
 
 ```java
-// Cache di un risultato costoso da ricalcolare
-@Cacheable(value = "accountBalance", key = "#accountId")
-public BigDecimal getBalance(String accountId) {
-    return accountRepository.calculateBalance(accountId); // query pesante
-}
-
-// Idempotency key con TTL, via RedisTemplate
-public boolean tryLockIdempotencyKey(String key) {
-    Boolean success = redisTemplate.opsForValue()
-        .setIfAbsent(key, "PROCESSED", Duration.ofMinutes(10));
-    return Boolean.TRUE.equals(success); // true solo se la chiave non esisteva già
+@Cacheable(value = "merchantConfig", key = "#merchantId")
+public MerchantConfig getMerchantConfig(String merchantId) {
+    return merchantRepository.loadConfig(merchantId);
 }
 ```
 
-### Rilevanza per il dominio pagamenti
-Due casi d'uso molto naturali: **cache** per dati letti di frequente e poco variabili (es. configurazioni, dati anagrafici merchant), e **gestione dell'idempotenza** tramite `SETNX`/`setIfAbsent` con TTL — un modo rapido per verificare "questa richiesta è già stata processata?" senza appesantire il DB transazionale principale. Anche utile per **rate limiting** sulle chiamate verso circuiti esterni, con `INCR` + TTL per contare le richieste in una finestra temporale.
+L'esempio presuppone tipi applicativi e configurazione della cache. Scadenza e invalidazione vanno progettate separatamente. Se molte chiavi scadono insieme, le richieste possono riversarsi sulla fonte: è una **cache stampede**, da contenere con scadenze distribuite e controllo del lavoro di ricostruzione.
 
-### Domande tipiche e risposte
+## Persistenza e distribuzione
 
-- *D: Redis è adatto a salvare il saldo di un conto come fonte di verità?*
-  R: No — è in-memory e pensato per velocità, non per le garanzie ACID complete che servono per il ledger. Il saldo "vero" resta su Oracle; Redis può cachearne una copia in lettura, ma ogni scrittura deve passare dal DB transazionale.
+Gli snapshot **RDB** salvano un'immagine dei dati; l'**AOF**, Append-Only File, registra operazioni. La finestra di perdita e i costi dipendono dalla configurazione. Essere in memoria non significa necessariamente perdere tutto al riavvio, ma avere persistenza non dimostra le garanzie necessarie a un registro contabile. La [documentazione Redis sulla persistenza](https://redis.io/docs/latest/management/persistence/) descrive i compromessi delle due modalità.
 
-- *D: Come implementeresti un idempotency check con Redis?*
-  R: Con `SETNX` (o `setIfAbsent` in Spring Data Redis) usando l'idempotency key come chiave — l'operazione è atomica, quindi se due richieste concorrenti arrivano nello stesso istante, solo una riuscirà a impostare la chiave, l'altra saprà che la richiesta è già in corso/completata. Si imposta un TTL per non accumulare chiavi indefinitamente.
+Il cluster divide le chiavi tra nodi: questo **sharding** aumenta la capacità complessiva ma richiede attenzione alle operazioni che coinvolgono più chiavi. La replica copia dati su altri nodi e ha proprietà diverse dal partizionamento. La memoria va dimensionata e la politica di eviction, cioè rimozione di chiavi quando il limite viene raggiunto, deve essere compatibile con il loro significato.
+
+## Contatori, messaggi e idempotenza
+
+Il **Pub/Sub** distribuisce messaggi ai subscriber collegati, senza offrire automaticamente la storia recuperabile di un log. È adatto ad alcune notifiche effimere, non a presumere che un consumer assente recuperi ogni pagamento.
+
+Per il rate limiting, un contatore con scadenza può limitare richieste in una finestra. Incremento e scadenza richiedono coordinamento: un crash tra due comandi può lasciare un contatore senza TTL. Per l'idempotenza, `SET` con opzioni di inserimento solo se assente e scadenza può assegnare un marcatore temporaneo. Quel marcatore non dimostra però che l'effetto sia completato e può scadere durante l'elaborazione.
+
+Per un addebito serve collegare identificatore, stato ed effetto durevole, spesso con un vincolo nel database autorevole. La [documentazione sui lock Redis](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/) discute le condizioni di sicurezza dei lock: un lock temporaneo e un registro dell'esito sono responsabilità differenti.
+
+## Ragionare sul caso d'uso
+
+Spiega quali dati del merchant metteresti in cache e come ne gestiresti la modifica. Poi confronta un contatore di accessi con un pagamento: il primo può tollerare alcune approssimazioni, il secondo richiede che un retry non produca un secondo effetto contabile.

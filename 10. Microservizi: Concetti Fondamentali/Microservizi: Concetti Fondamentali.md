@@ -1,37 +1,31 @@
-# 10. Microservizi: Concetti Fondamentali
+# 10. Microservizi: i concetti fondamentali
 
-### Cos'è e perché conta
-Anche se non esplicitamente nella job description, un'architettura di pagamenti mission-critical con integrazioni multiple (circuiti, banche, provider terzi) è quasi certamente organizzata a microservizi o comunque a servizi distribuiti. Vale la pena arrivare preparato anche su questo fronte.
+## Una divisione delle responsabilità, prima che dei processi
 
-### Cosa studiare
+Un **microservizio** gestisce una capacità applicativa attraverso un contratto esplicito e può essere rilasciato con una propria autonomia. Il suo valore non si misura dal numero di classi. In un sistema di pagamenti, autorizzazione e riconciliazione possono avere ritmi, carichi e responsabilità differenti; separarle può essere utile se questi confini sono chiari.
 
-**Principi di base**
+Il pattern database per service assegna al servizio la proprietà dei dati. Gli altri servizi usano contratti invece di modificarne direttamente le tabelle. Questo riduce alcune dipendenze ma elimina la comodità di una transazione locale su tutto il sistema. Il capitolo 6 affronta le conseguenze sulla consistenza.
 
-I microservizi sono un'architettura dove l'applicazione è scomposta in servizi indipendenti, ciascuno responsabile di una specifica funzionalità di business. Ogni servizio ha il proprio database (**database per service pattern**), può essere deployato indipendentemente e comunica con gli altri attraverso API ben definite.
+## Quando l'autonomia ripaga la complessità
 
-*Esempio nel dominio pagamenti*: un servizio `authorization-service` (gestisce le autorizzazioni), uno `settlement-service` (gestisce clearing/settlement), uno `reconciliation-service` (riconciliazione) — ognuno con il proprio DB, deployabile e scalabile in autonomia.
+La scalabilità indipendente consente di aumentare capacità solo dove serve. Il rilascio indipendente permette a team distinti di cambiare una funzione senza pubblicare tutto il prodotto. Queste possibilità sono reali soltanto se contratti e dipendenze lo consentono.
 
-**Vantaggi e trade-off**
+L'isolamento dei guasti va progettato: un servizio separato può comunque bloccare tutti i chiamanti se questi attendono senza limite. Si aggiungono inoltre rete, osservabilità e coordinamento operativo. Un monolite modulare può essere più semplice quando un team gestisce un dominio ancora in evoluzione e non serve un rilascio separato.
 
-Devi essere pronto a discutere quando conviene usarli:
-- **Vantaggi**: scalabilità indipendente (es. scalare solo il servizio di autorizzazione nei picchi di traffico, senza toccare il resto), isolamento dei guasti (un servizio che cade non abbatte tutto il sistema), libertà tecnologica per ogni servizio, team autonomi che possono rilasciare senza coordinarsi con tutti gli altri
-- **Svantaggi**: complessità nella gestione distribuita, necessità di orchestrazione, monitoraggio avanzato (vedi osservabilità più sotto), gestione delle transazioni distribuite (niente più semplice `@Transactional` locale quando l'operazione coinvolge più servizi)
+## Comunicazione sincrona e asincrona
 
-**Comunicazione tra servizi**
+Nella comunicazione **sincrona** il chiamante aspetta una risposta, come in una chiamata HTTP REST o RPC. **gRPC** offre un modello di chiamata remota con contratti tipizzati; REST organizza l'interazione intorno alle risorse. In entrambi i casi attesa e guasti devono avere limiti espliciti.
 
-- **Sincrona** (REST, gRPC): il chiamante aspetta la risposta. Più semplice da ragionare, ma accoppia temporalmente i servizi — se il servizio chiamato è lento o giù, blocca anche il chiamante
-- **Asincrona** (message broker come RabbitMQ, Kafka, AWS SQS): il chiamante pubblica un messaggio/evento e prosegue, senza aspettare. Preferibile per disaccoppiare i servizi e gestire meglio i picchi di carico
+Nella comunicazione **asincrona** il lavoro è inviato o annunciato tramite messaggi. Il producer non deve attendere il completamento del consumer, ma il sistema deve rappresentare stati intermedi e recuperare messaggi non elaborati. Un'autorizzazione può richiedere una risposta immediata al client; notifiche e reportistica possono seguire un evento successivo.
 
-*Esempio pagamenti*: l'autorizzazione di una transazione richiede tipicamente comunicazione **sincrona** (il cliente al POS aspetta una risposta in millisecondi), mentre l'invio di notifiche, l'aggiornamento di sistemi di reportistica o l'innesco della riconciliazione post-transazione sono tipicamente **asincroni** via evento (es. `TransactionCompletedEvent` pubblicato su Kafka).
+## Trovare e proteggere le dipendenze
 
-**Pattern essenziali**
+Un **API Gateway** instrada richieste e applica controlli comuni. La **service discovery** permette di trovare istanze mediante un registro o il meccanismo della piattaforma, senza fissare ogni indirizzo nel codice. Nessuno dei due elimina la possibilità che la destinazione sia lenta o non raggiungibile.
 
-- **API Gateway**: punto d'ingresso unico per i client, che instrada le richieste ai servizi interni, gestendo trasversalmente autenticazione, rate limiting, routing
-- **Service Discovery** (Consul, Eureka): permette ai servizi di trovarsi dinamicamente a runtime, senza indirizzi IP hardcoded — essenziale quando i servizi scalano e le istanze cambiano continuamente
-- **Circuit Breaker** (pattern reso popolare da Hystrix, oggi più spesso Resilience4j): se un servizio a valle inizia a fallire ripetutamente, il circuit breaker "apre il circuito" e smette temporaneamente di chiamarlo, restituendo subito un errore/fallback invece di continuare a intasarlo con richieste che falliranno comunque — fondamentale per evitare che un servizio in difficoltà (es. un circuito di pagamento esterno lento) faccia collassare a cascata anche i servizi che lo chiamano
-- **Saga pattern**: per gestire transazioni distribuite su più servizi senza un "commit" globale come nel mondo relazionale — una saga è una sequenza di transazioni locali, ciascuna con una **compensazione** (azione di rollback logico) se un passo successivo fallisce. Due varianti: *orchestrazione* (un coordinatore centrale dirige i passi) o *coreografia* (ogni servizio reagisce a eventi e decide autonomamente il passo successivo)
-  - *Esempio pagamenti*: un pagamento che coinvolge debit dell'account, notifica al merchant e aggiornamento del ledger — se l'ultimo passo fallisce, la saga esegue le compensazioni (es. re-credit dell'account) invece di un rollback atomico impossibile su più DB separati
-- **Event Sourcing e CQRS**: Event Sourcing salva lo stato di un'entità come sequenza di eventi immutabili (invece che come stato corrente sovrascritto) — utilissimo in ambito finanziario per audit trail completo, dato che ogni cambiamento di stato è tracciato. CQRS (Command Query Responsibility Segregation) separa il modello usato per le scritture da quello usato per le letture, spesso ottimizzati diversamente — combinato con Event Sourcing è un pattern molto comune in sistemi di pagamento/contabilità dove la tracciabilità storica è un requisito normativo
+Un **circuit breaker** interrompe temporaneamente chiamate che falliscono ripetutamente, poi prova se la dipendenza è tornata utilizzabile. Un timeout limita la singola attesa e un bulkhead separa capacità: sono protezioni complementari. Un fallback deve rispettare il dominio; per un pagamento può significare comunicare indisponibilità o esito da verificare, non inventare un'autorizzazione riuscita.
 
-### Come esercitarti
-Prepara un esempio in cui spieghi perché il **Circuit Breaker** è particolarmente rilevante in un sistema che chiama circuiti di pagamento esterni: se Visa/Mastercard rispondono lentamente, senza circuit breaker rischi di saturare i thread/connessioni del tuo servizio in attesa, propagando il problema a cascata.
+## Da una richiesta a un processo distribuito
+
+Una Saga coordina transazioni locali e compensazioni. Event Sourcing conserva cambiamenti come eventi; CQRS distingue modelli di modifica e lettura. Sono strumenti per esigenze precise, approfonditi nel capitolo 36, non requisiti per chiamare «a microservizi» un sistema.
+
+Come esercizio, descrivi il comportamento dell'autorizzazione quando il provider esterno rallenta. Indica quali risorse restano occupate, quando interrompi l'attesa e come recuperi un risultato arrivato dopo il timeout senza addebitare due volte.
