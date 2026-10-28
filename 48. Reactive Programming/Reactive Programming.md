@@ -43,3 +43,29 @@ Se si deve integrare codice bloccante, lo si isola su uno scheduler appropriato,
 `CompletableFuture` compone principalmente risultati asincroni singoli. Reactor aggiunge un modello per flussi, domanda e operatori di composizione; in cambio richiede familiarità con sottoscrizioni, scheduler e propagazione degli errori. Il beneficio va confrontato con la complessità che il team dovrà mantenere.
 
 Progetta un endpoint che chiama tre API esterne. Spiega quali risultati sono indispensabili, quali timeout hanno e se un fallimento consente una risposta parziale. Confronta una composizione reattiva e una soluzione con virtual thread usando lo stesso carico e gli stessi limiti: valuta latenza, memoria, errori e chiarezza del codice.
+
+## Esempio: composizione non bloccante e scelta del modello
+
+Nel codice imperativo tradizionale una query o una chiamata HTTP può lasciare il thread in attesa fino alla risposta. In un flusso non bloccante il thread può lavorare su altre operazioni mentre il risultato non è pronto:
+
+```java
+public Mono<OrdineDto> trovaOrdine(String id) {
+    return ordineClient.trova(id)
+        .flatMap(ordine -> pagamentoClient.trova(id)
+            .map(pagamento -> combina(ordine, pagamento)));
+}
+```
+
+L'esempio presume client reattivi e metodi applicativi appropriati. Una chiamata JDBC bloccante eseguita direttamente sull'event loop compromette il beneficio; se inevitabile, va isolata su uno scheduler per lavoro bloccante. La backpressure regola la domanda nell'ambito Reactive Streams, ma non obbliga ogni sistema esterno a rallentare.
+
+| Aspetto | Virtual thread | Flusso reattivo non bloccante |
+|---|---|---|
+| Stile | Sequenziale e imperativo | Composizione asincrona di flussi |
+| I/O | Il virtual thread può sospendersi durante molte attese | Il risultato viene elaborato quando disponibile |
+| Librerie bloccanti | Spesso utilizzabili direttamente | Devono essere isolate o sostituite |
+| Backpressure | Richiede limiti e meccanismi adeguati | Espressa tramite Reactive Streams |
+| Caso tipico | Molte richieste I/O con codice imperativo | Streaming e composizione con controllo della domanda |
+
+Nessuno dei due modelli aumenta automaticamente la capacità della CPU o del database. La scelta dipende dalle dipendenze, dalla natura dei flussi, dalla capacità del team e da misure sul carico effettivo. Il capitolo 01 approfondisce i virtual thread.
+
+**Risposta da colloquio:** «Non-blocking libera il thread durante l'attesa; funziona bene per molta concorrenza I/O, purché l'intera catena e le politiche di sovraccarico siano progettate coerentemente».

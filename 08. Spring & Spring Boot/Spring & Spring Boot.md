@@ -208,3 +208,23 @@ Entrambi i framework nascono per implementare gli **Enterprise Integration Patte
 1. **Configurazione Spring Security**: scrivi a mano una configurazione `SecurityFilterChain` con validazione JWT stateless, esclusione degli endpoint di health check Actuator e autorizzazioni differenziate per ruoli operatore e admin.
 
 2. **Global Exception Handler**: implementa un `@RestControllerAdvice` con gestione di 3 eccezioni di business custom, restituendo un oggetto di errore strutturato con codice errore univoco, messaggio human-readable e timestamp.
+
+## Approfondimento: rollbackFor e confini transazionali
+
+Per default `@Transactional` dispone il rollback se dal metodo esce una `RuntimeException` o un `Error`; una checked exception non lo causa automaticamente. La configurazione globale del progetto può modificare questa regola. Per una specifica eccezione checked:
+
+```java
+@Transactional(rollbackFor = BusinessException.class)
+public void creaOrdine() throws BusinessException {
+    ordineRepository.save(new Ordine());
+    throw new BusinessException("Errore di business");
+}
+```
+
+`rollbackFor` accetta anche più classi; `noRollbackFor` può escludere una specifica eccezione. Preferire tipi di eccezione espliciti rende la regola più chiara. Se l'eccezione viene catturata e non rilanciata, l'intercettore potrebbe vedere una conclusione normale e tentare il commit; un componente interno potrebbe però avere già marcato la transazione come rollback-only.
+
+Nella modalità predefinita basata su proxy, una **chiamata interna** a un metodo `@Transactional` dello stesso oggetto non passa dal proxy e non attiva l'intercettazione di quel metodo. Separare le responsabilità in bean distinti è una soluzione comune.
+
+La propagation `REQUIRED` partecipa alla transazione esistente oppure ne crea una; `REQUIRES_NEW` sospende quella corrente e ne avvia una indipendente. Per esempio, un audit confermato in `REQUIRES_NEW` può restare salvato anche se la transazione esterna viene annullata. Una transazione database non annulla automaticamente una chiamata HTTP o un evento già pubblicato su Kafka.
+
+**Risposta da colloquio:** «Uso `rollbackFor` per indicare le eccezioni che devono annullare la transazione, soprattutto checked; verifico anche eccezioni catturate, chiamate attraverso il proxy e propagation». [Documentazione Spring](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/annotation/Transactional.html).

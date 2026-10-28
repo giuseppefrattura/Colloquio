@@ -234,3 +234,20 @@ public Mono<PaymentResponse> processPayment(PaymentRequest request) {
 1. **Stream & Collections Mastery**: Scrivi un metodo che, data una lista di transazioni finanziarie, le raggruppi per valuta e stato, calcoli l'importo medio per gruppo, escluda i gruppi con meno di 5 transazioni e restituisca una mappa ordinata.
 
 2. **Virtual Threads Benchmark**: Configura un'applicazione Spring Boot 3.2+ con `spring.threads.virtual.enabled=true` e verifica come un endpoint che simula un I/O bloccante da 200 ms gestisce 10.000 richieste concorrenti senza saturare il sistema operativo.
+
+## Approfondimento: virtual thread e limiti delle risorse
+
+I virtual thread sono stabili da Java 21. La JVM li esegue su un numero più contenuto di platform thread, detti **carrier**. Durante molte operazioni I/O bloccanti può sospendere il virtual thread e liberare il carrier per altri task. Il codice rimane sequenziale e bloccante dal punto di vista del virtual thread:
+
+```java
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    Future<String> risultato = executor.submit(() -> chiamaServizioRemoto());
+    System.out.println(risultato.get());
+}
+```
+
+Sono adatti a molte operazioni concorrenti che trascorrono tempo in attesa, anche usando librerie imperative. Non accelerano automaticamente il lavoro CPU-bound e non aumentano la capacità di un database o di un servizio remoto: con 20 connessioni disponibili, 100.000 virtual thread non creano nuove connessioni. Restano necessari timeout, limiti di concorrenza e monitoraggio; un semaforo può limitare l'accesso a una risorsa a valle.
+
+Alcune operazioni possono trattenere il carrier, fenomeno detto **pinning**; cause e mitigazioni dipendono dalla versione Java. I virtual thread supportano `ThreadLocal`, ma creare stato costoso per ciascun thread può diventare oneroso su larga scala. Per i dettagli e le differenze fra versioni si veda la [documentazione Oracle](https://docs.oracle.com/en/java/javase/26/core/virtual-threads.html). Il capitolo 48 confronta questo modello con la programmazione reattiva e la backpressure.
+
+**Risposta da colloquio:** «I virtual thread consentono di gestire molte attese I/O con codice imperativo, ma le risorse a valle restano limitate e devono essere protette».

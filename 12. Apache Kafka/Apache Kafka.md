@@ -45,3 +45,15 @@ Le garanzie di consegna dipendono da configurazione e coordinamento. Non basta u
 ## Un caso da spiegare
 
 Pubblica un evento di autorizzazione e descrivi come contabilità e riconciliazione lo leggono con gruppi distinti. Poi simula un crash dopo la scrittura contabile: spiega quale record verrà riletto e quale controllo impedirà una seconda registrazione.
+
+## Dal flusso di ordini alla gestione dei guasti
+
+Un `Order Service` pubblica `OrderCreated` sul topic `orders`; magazzino e notifiche lo leggono con **gruppi differenti**. In un gruppo ogni partizione è assegnata a un solo consumer alla volta: con tre partizioni e cinque consumer, almeno due restano inattivi per quel topic. Un ingresso o un'uscita dal gruppo può causare un **rebalance**, cioè la riassegnazione delle partizioni.
+
+Usare `orderId` come key consente normalmente di collocare gli eventi dello stesso ordine nella stessa partizione. L'ordine vale dentro la partizione, non fra tutte le partizioni; cambiare il loro numero può cambiare la distribuzione delle chiavi. Anche elaborazioni parallele e retry possono influire sull'ordine degli effetti.
+
+Con **at-least-once**, un crash dopo l'effetto ma prima del commit dell'offset può causare una nuova elaborazione. Il consumer deve essere idempotente: per esempio registra un `eventId` stabile con un vincolo univoco, nella stessa transazione dell'effetto sul database. La produzione idempotente e le transazioni Kafka supportano garanzie più forti in determinati flussi Kafka-to-Kafka, ma non rendono automaticamente atomiche chiamate a database, email o API esterne.
+
+Per evitare il *dual write* fra database e Kafka, la **transactional outbox** salva ordine ed evento in una tabella outbox nella stessa transazione. Un processo separato pubblica l'evento e lo marca come inviato. Se si interrompe dopo la pubblicazione ma prima della marcatura può ripubblicarlo: l'idempotenza del consumer rimane necessaria. Il capitolo 36 approfondisce questo coordinamento.
+
+**Risposta da colloquio:** «Kafka distribuisce eventi in topic e partizioni. L'ordine è per partizione, il parallelismo di un gruppo è limitato dalle partizioni e, con consegna at-least-once, progetto i consumer per tollerare duplicati».

@@ -31,3 +31,18 @@ I **contract test** verificano aspettative concordate tra producer e consumer pr
 ## Applicare le regole a un caso concreto
 
 Un gateway può centralizzare controllo dei token, limite di richieste e instradamento. Il servizio dei pagamenti deve ancora verificare che il soggetto possa operare su quel conto e quell'importo. Per esercitarti, progetta una modifica al contratto di pagamento e spiega come manterresti i client precedenti, come comunicheresti la dismissione e quali controlli impedirebbero accessi indebiti.
+
+## Sicurezza architetturale e confini di fiducia
+
+Consideriamo client, API gateway, servizio ordini, servizio pagamenti, database e Kafka. Un **confine di fiducia** è un passaggio in cui cambiano identità, responsabilità o livello di controllo: per ciascuno occorre stabilire chi può accedere, a quali risorse e con quali prove di identità.
+
+- **Least privilege:** il servizio notifiche riceve solo i permessi indispensabili; non ha bisogno di modificare i pagamenti.
+- **Defense in depth:** TLS, autenticazione, autorizzazione, validazione e restrizioni di rete si rafforzano a vicenda.
+- **Zero trust:** la sola posizione nella rete interna non rende affidabile una richiesta; anche la comunicazione tra servizi richiede identità e autorizzazione adeguate.
+- **Separazione dei dati:** limitare accessi diretti a database e segreti riduce l'impatto di un servizio compromesso.
+
+In pratica si prevedono TLS e, dove appropriato, mTLS; secret manager e rotazione delle credenziali; query parametrizzate e validazione degli input; minimizzazione dei dati, audit senza password o token, timeout e limiti di richiesta. Per Kafka si applicano autenticazione e ACL sui topic, valutando anche chi può leggere gli eventi e per quanto tempo vengono conservati.
+
+Il **threat modeling** parte da asset, attori, punti di ingresso e confini, identifica minacce e valuta mitigazioni e verifiche. Un gateway può centralizzare controlli, ma il servizio deve comunque verificare che un utente possa accedere allo specifico ordine o conto richiesto.
+
+**Risposta da colloquio:** «Progetto la sicurezza lungo l'intero percorso della richiesta: identità verificabile, autorizzazione sulla risorsa, minimo privilegio e controlli indipendenti per contenere l'impatto di un guasto o di una compromissione».

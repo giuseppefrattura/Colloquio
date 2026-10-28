@@ -39,3 +39,23 @@ Nella rotazione ordinaria una finestra di sovrapposizione può permettere ai tok
 RBAC associa permessi a ruoli; ABAC usa attributi e contesto; gli scope delimitano la delega. Il gateway può applicare controlli comuni, mentre il resource server protegge le regole e i dati che possiede. Il client ottiene il token dall'authorization server e poi lo presenta all'API: non ogni chiamata richiede un nuovo login presso il provider.
 
 Per esercitarti, disegna separatamente il login e una chiamata all'API. Indica chi riceve codice, ID token, access token e refresh token, e spiega quale controllo impedisce a un token valido per un'altra API di essere accettato.
+
+## JWT e OAuth: confronto da colloquio
+
+| Concetto | Ruolo | Domanda |
+|---|---|---|
+| JWT | Formato per rappresentare claims in un token | Come sono rappresentate le informazioni? |
+| OAuth 2.0 | Framework di autorizzazione | Come ottiene accesso il client? |
+| OpenID Connect | Livello di identità sopra OAuth 2.0 | Come viene autenticato l'utente? |
+
+Non sono alternative sullo stesso piano: un access token OAuth può essere un JWT oppure un token opaco. Con un JWT firmato il resource server può validare localmente la firma e le claims; la revoca anticipata richiede però ulteriori meccanismi o compromessi, ad esempio durata breve o controllo dello stato. Un token opaco può essere verificato tramite introspection, introducendo una dipendenza dal servizio di validazione e le relative scelte di caching.
+
+Esempio di claims in un JWT firmato:
+
+```json
+{"sub":"user-123","iss":"https://identity.example","aud":"orders-api","exp":1800000000,"scope":"orders:read"}
+```
+
+Il payload è codificato, non cifrato: non va usato per nascondere segreti. Il servizio verifica la firma con algoritmi consentiti, emittente, destinatario e scadenza, poi applica le regole sulla risorsa. Un access token serve per l'API; un ID token è destinato al client e descrive l'autenticazione: non è automaticamente utilizzabile come access token.
+
+**Risposta da colloquio:** «JWT è un formato, OAuth regola la delega di accesso e OIDC aggiunge autenticazione. La scelta tra token JWT e opaco comporta compromessi fra validazione locale e gestione dello stato e della revoca».

@@ -319,6 +319,23 @@ public Mono<PaymentResponse> processPayment(PaymentRequest request) {
 
 2. **Virtual Threads Benchmark**: Configura un'applicazione Spring Boot 3.2+ con `spring.threads.virtual.enabled=true` e verifica come un endpoint che simula un I/O bloccante da 200 ms gestisce 10.000 richieste concorrenti senza saturare il sistema operativo.
 
+### Approfondimento: virtual thread e limiti delle risorse
+
+I virtual thread sono stabili da Java 21. La JVM li esegue su un numero più contenuto di platform thread, detti **carrier**. Durante molte operazioni I/O bloccanti può sospendere il virtual thread e liberare il carrier per altri task. Il codice rimane sequenziale e bloccante dal punto di vista del virtual thread:
+
+```java
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    Future<String> risultato = executor.submit(() -> chiamaServizioRemoto());
+    System.out.println(risultato.get());
+}
+```
+
+Sono adatti a molte operazioni concorrenti che trascorrono tempo in attesa, anche usando librerie imperative. Non accelerano automaticamente il lavoro CPU-bound e non aumentano la capacità di un database o di un servizio remoto: con 20 connessioni disponibili, 100.000 virtual thread non creano nuove connessioni. Restano necessari timeout, limiti di concorrenza e monitoraggio; un semaforo può limitare l'accesso a una risorsa a valle.
+
+Alcune operazioni possono trattenere il carrier, fenomeno detto **pinning**; cause e mitigazioni dipendono dalla versione Java. I virtual thread supportano `ThreadLocal`, ma creare stato costoso per ciascun thread può diventare oneroso su larga scala. Per i dettagli e le differenze fra versioni si veda la [documentazione Oracle](https://docs.oracle.com/en/java/javase/26/core/virtual-threads.html). Il capitolo 48 confronta questo modello con la programmazione reattiva e la backpressure.
+
+**Risposta da colloquio:** «I virtual thread consentono di gestire molte attese I/O con codice imperativo, ma le risorse a valle restano limitate e devono essere protette».
+
 <a id="capitolo-02"></a>
 
 ## 2. Linguaggi Alternativi: Go e Scala (Paradigmi Funzionali)
@@ -3668,6 +3685,26 @@ Entrambi i framework nascono per implementare gli **Enterprise Integration Patte
 
 2. **Global Exception Handler**: implementa un `@RestControllerAdvice` con gestione di 3 eccezioni di business custom, restituendo un oggetto di errore strutturato con codice errore univoco, messaggio human-readable e timestamp.
 
+### Approfondimento: rollbackFor e confini transazionali
+
+Per default `@Transactional` dispone il rollback se dal metodo esce una `RuntimeException` o un `Error`; una checked exception non lo causa automaticamente. La configurazione globale del progetto può modificare questa regola. Per una specifica eccezione checked:
+
+```java
+@Transactional(rollbackFor = BusinessException.class)
+public void creaOrdine() throws BusinessException {
+    ordineRepository.save(new Ordine());
+    throw new BusinessException("Errore di business");
+}
+```
+
+`rollbackFor` accetta anche più classi; `noRollbackFor` può escludere una specifica eccezione. Preferire tipi di eccezione espliciti rende la regola più chiara. Se l'eccezione viene catturata e non rilanciata, l'intercettore potrebbe vedere una conclusione normale e tentare il commit; un componente interno potrebbe però avere già marcato la transazione come rollback-only.
+
+Nella modalità predefinita basata su proxy, una **chiamata interna** a un metodo `@Transactional` dello stesso oggetto non passa dal proxy e non attiva l'intercettazione di quel metodo. Separare le responsabilità in bean distinti è una soluzione comune.
+
+La propagation `REQUIRED` partecipa alla transazione esistente oppure ne crea una; `REQUIRES_NEW` sospende quella corrente e ne avvia una indipendente. Per esempio, un audit confermato in `REQUIRES_NEW` può restare salvato anche se la transazione esterna viene annullata. Una transazione database non annulla automaticamente una chiamata HTTP o un evento già pubblicato su Kafka.
+
+**Risposta da colloquio:** «Uso `rollbackFor` per indicare le eccezioni che devono annullare la transazione, soprattutto checked; verifico anche eccezioni catturate, chiamate attraverso il proxy e propagation». [Documentazione Spring](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/annotation/Transactional.html).
+
 ### Aspect Oriented Programming (AOP) e Aspect in Spring
 
 #### Perché AOP è importante
@@ -4438,6 +4475,18 @@ Le garanzie di consegna dipendono da configurazione e coordinamento. Non basta u
 ### Un caso da spiegare
 
 Pubblica un evento di autorizzazione e descrivi come contabilità e riconciliazione lo leggono con gruppi distinti. Poi simula un crash dopo la scrittura contabile: spiega quale record verrà riletto e quale controllo impedirà una seconda registrazione.
+
+### Dal flusso di ordini alla gestione dei guasti
+
+Un `Order Service` pubblica `OrderCreated` sul topic `orders`; magazzino e notifiche lo leggono con **gruppi differenti**. In un gruppo ogni partizione è assegnata a un solo consumer alla volta: con tre partizioni e cinque consumer, almeno due restano inattivi per quel topic. Un ingresso o un'uscita dal gruppo può causare un **rebalance**, cioè la riassegnazione delle partizioni.
+
+Usare `orderId` come key consente normalmente di collocare gli eventi dello stesso ordine nella stessa partizione. L'ordine vale dentro la partizione, non fra tutte le partizioni; cambiare il loro numero può cambiare la distribuzione delle chiavi. Anche elaborazioni parallele e retry possono influire sull'ordine degli effetti.
+
+Con **at-least-once**, un crash dopo l'effetto ma prima del commit dell'offset può causare una nuova elaborazione. Il consumer deve essere idempotente: per esempio registra un `eventId` stabile con un vincolo univoco, nella stessa transazione dell'effetto sul database. La produzione idempotente e le transazioni Kafka supportano garanzie più forti in determinati flussi Kafka-to-Kafka, ma non rendono automaticamente atomiche chiamate a database, email o API esterne.
+
+Per evitare il *dual write* fra database e Kafka, la **transactional outbox** salva ordine ed evento in una tabella outbox nella stessa transazione. Un processo separato pubblica l'evento e lo marca come inviato. Se si interrompe dopo la pubblicazione ma prima della marcatura può ripubblicarlo: l'idempotenza del consumer rimane necessaria. Il capitolo 36 approfondisce questo coordinamento.
+
+**Risposta da colloquio:** «Kafka distribuisce eventi in topic e partizioni. L'ordine è per partizione, il parallelismo di un gruppo è limitato dalle partizioni e, con consegna at-least-once, progetto i consumer per tollerare duplicati».
 
 <a id="capitolo-13"></a>
 
@@ -6174,6 +6223,21 @@ I **contract test** verificano aspettative concordate tra producer e consumer pr
 
 Un gateway può centralizzare controllo dei token, limite di richieste e instradamento. Il servizio dei pagamenti deve ancora verificare che il soggetto possa operare su quel conto e quell'importo. Per esercitarti, progetta una modifica al contratto di pagamento e spiega come manterresti i client precedenti, come comunicheresti la dismissione e quali controlli impedirebbero accessi indebiti.
 
+### Sicurezza architetturale e confini di fiducia
+
+Consideriamo client, API gateway, servizio ordini, servizio pagamenti, database e Kafka. Un **confine di fiducia** è un passaggio in cui cambiano identità, responsabilità o livello di controllo: per ciascuno occorre stabilire chi può accedere, a quali risorse e con quali prove di identità.
+
+- **Least privilege:** il servizio notifiche riceve solo i permessi indispensabili; non ha bisogno di modificare i pagamenti.
+- **Defense in depth:** TLS, autenticazione, autorizzazione, validazione e restrizioni di rete si rafforzano a vicenda.
+- **Zero trust:** la sola posizione nella rete interna non rende affidabile una richiesta; anche la comunicazione tra servizi richiede identità e autorizzazione adeguate.
+- **Separazione dei dati:** limitare accessi diretti a database e segreti riduce l'impatto di un servizio compromesso.
+
+In pratica si prevedono TLS e, dove appropriato, mTLS; secret manager e rotazione delle credenziali; query parametrizzate e validazione degli input; minimizzazione dei dati, audit senza password o token, timeout e limiti di richiesta. Per Kafka si applicano autenticazione e ACL sui topic, valutando anche chi può leggere gli eventi e per quanto tempo vengono conservati.
+
+Il **threat modeling** parte da asset, attori, punti di ingresso e confini, identifica minacce e valuta mitigazioni e verifiche. Un gateway può centralizzare controlli, ma il servizio deve comunque verificare che un utente possa accedere allo specifico ordine o conto richiesto.
+
+**Risposta da colloquio:** «Progetto la sicurezza lungo l'intero percorso della richiesta: identità verificabile, autorizzazione sulla risorsa, minimo privilegio e controlli indipendenti per contenere l'impatto di un guasto o di una compromissione».
+
 <a id="capitolo-39"></a>
 
 ## 39. Affidabilità, SRE e Chaos Engineering
@@ -6437,6 +6501,26 @@ RBAC associa permessi a ruoli; ABAC usa attributi e contesto; gli scope delimita
 
 Per esercitarti, disegna separatamente il login e una chiamata all'API. Indica chi riceve codice, ID token, access token e refresh token, e spiega quale controllo impedisce a un token valido per un'altra API di essere accettato.
 
+### JWT e OAuth: confronto da colloquio
+
+| Concetto | Ruolo | Domanda |
+|---|---|---|
+| JWT | Formato per rappresentare claims in un token | Come sono rappresentate le informazioni? |
+| OAuth 2.0 | Framework di autorizzazione | Come ottiene accesso il client? |
+| OpenID Connect | Livello di identità sopra OAuth 2.0 | Come viene autenticato l'utente? |
+
+Non sono alternative sullo stesso piano: un access token OAuth può essere un JWT oppure un token opaco. Con un JWT firmato il resource server può validare localmente la firma e le claims; la revoca anticipata richiede però ulteriori meccanismi o compromessi, ad esempio durata breve o controllo dello stato. Un token opaco può essere verificato tramite introspection, introducendo una dipendenza dal servizio di validazione e le relative scelte di caching.
+
+Esempio di claims in un JWT firmato:
+
+```json
+{"sub":"user-123","iss":"https://identity.example","aud":"orders-api","exp":1800000000,"scope":"orders:read"}
+```
+
+Il payload è codificato, non cifrato: non va usato per nascondere segreti. Il servizio verifica la firma con algoritmi consentiti, emittente, destinatario e scadenza, poi applica le regole sulla risorsa. Un access token serve per l'API; un ID token è destinato al client e descrive l'autenticazione: non è automaticamente utilizzabile come access token.
+
+**Risposta da colloquio:** «JWT è un formato, OAuth regola la delega di accesso e OIDC aggiunge autenticazione. La scelta tra token JWT e opaco comporta compromessi fra validazione locale e gestione dello stato e della revoca».
+
 <a id="capitolo-45"></a>
 
 ## 45. LDAP e Active Directory
@@ -6665,6 +6749,32 @@ Se si deve integrare codice bloccante, lo si isola su uno scheduler appropriato,
 `CompletableFuture` compone principalmente risultati asincroni singoli. Reactor aggiunge un modello per flussi, domanda e operatori di composizione; in cambio richiede familiarità con sottoscrizioni, scheduler e propagazione degli errori. Il beneficio va confrontato con la complessità che il team dovrà mantenere.
 
 Progetta un endpoint che chiama tre API esterne. Spiega quali risultati sono indispensabili, quali timeout hanno e se un fallimento consente una risposta parziale. Confronta una composizione reattiva e una soluzione con virtual thread usando lo stesso carico e gli stessi limiti: valuta latenza, memoria, errori e chiarezza del codice.
+
+### Esempio: composizione non bloccante e scelta del modello
+
+Nel codice imperativo tradizionale una query o una chiamata HTTP può lasciare il thread in attesa fino alla risposta. In un flusso non bloccante il thread può lavorare su altre operazioni mentre il risultato non è pronto:
+
+```java
+public Mono<OrdineDto> trovaOrdine(String id) {
+    return ordineClient.trova(id)
+        .flatMap(ordine -> pagamentoClient.trova(id)
+            .map(pagamento -> combina(ordine, pagamento)));
+}
+```
+
+L'esempio presume client reattivi e metodi applicativi appropriati. Una chiamata JDBC bloccante eseguita direttamente sull'event loop compromette il beneficio; se inevitabile, va isolata su uno scheduler per lavoro bloccante. La backpressure regola la domanda nell'ambito Reactive Streams, ma non obbliga ogni sistema esterno a rallentare.
+
+| Aspetto | Virtual thread | Flusso reattivo non bloccante |
+|---|---|---|
+| Stile | Sequenziale e imperativo | Composizione asincrona di flussi |
+| I/O | Il virtual thread può sospendersi durante molte attese | Il risultato viene elaborato quando disponibile |
+| Librerie bloccanti | Spesso utilizzabili direttamente | Devono essere isolate o sostituite |
+| Backpressure | Richiede limiti e meccanismi adeguati | Espressa tramite Reactive Streams |
+| Caso tipico | Molte richieste I/O con codice imperativo | Streaming e composizione con controllo della domanda |
+
+Nessuno dei due modelli aumenta automaticamente la capacità della CPU o del database. La scelta dipende dalle dipendenze, dalla natura dei flussi, dalla capacità del team e da misure sul carico effettivo. Il capitolo 01 approfondisce i virtual thread.
+
+**Risposta da colloquio:** «Non-blocking libera il thread durante l'attesa; funziona bene per molta concorrenza I/O, purché l'intera catena e le politiche di sovraccarico siano progettate coerentemente».
 
 <a id="capitolo-49"></a>
 
